@@ -10,11 +10,11 @@
 <bool> ::= "true" | "false"
 <bool_binop> ::= "||" | "&&"
 <bool_op> ::= "!"
-<bool_expr> ::= <bool> | <bool_expr> <bool_binop> <bool_expr> | <bool_op> <bool_expr>
+<bool_expr> ::= <bool> | <bool_expr> <bool_binop> <bool> | <bool_op> <bool_expr>
 <bool_stmt> ::= <bool_expr> ";"
 
 <op> ::= "+" | "-" | "*" | "/"
-<int_expr> ::= <int> | <int_expr> <op> <int_expr>
+<int_expr> ::= <int> | <int_expr> <op> <int>
 <str_expr> ::= <string> | <string> "+" <string>
 <expr> ::= <int_expr> | <str_expr> | <bool_expr>
 <expr_list> ::= <expr> | <expr> "," <expr>
@@ -49,6 +49,7 @@ Additional info:
 - Functions return the value of their last executed statement
 - 1..10 is expanded to tuple (1, 2, ..., 9)
 - strings can only contain alphabetical letters
+- Operator precedence is left to right (!, \*, and / do not have precedence over other operations)
 
 Possible TODOs:
 - Add rust macros
