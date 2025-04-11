@@ -42,6 +42,9 @@
 <stmt_list> ::= <stmt> | <stmt> <stmt_list>
 <block> ::= "{" <stmt_list> "}"
 ```
+Key idea:
+- Implement rust ownership semantics on heap allocated tuples
+- Non-heap allocated structures should be copied and not moved
 
 Additional info:
 - All declarations are immutable
@@ -55,4 +58,6 @@ Possible TODOs:
 - Add rust macros
 - Add pattern matching
 - Add function return statements
+- Add immutable borrows
+- Add iterators? -> Not necessary
 - ...
