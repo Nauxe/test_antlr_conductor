@@ -14,16 +14,16 @@ stmt
 
 expr_stmt: expr ';' ;
 
-decl: 'let' identifier ':' type '=' expr ';' ;
+decl: 'let' IDENTIFIER ':' type '=' expr ';' ;
 
-fn_decl: 'fn' identifier '(' param_list_opt ')' '->' type block ;
+fn_decl: 'fn' IDENTIFIER '(' param_list_opt ')' '->' type block ;
 
 param_list_opt 
     : // empty
     | param_list;
 
 param_list: param (',' param)* ;
-param: identifier ':' type ;
+param: IDENTIFIER ':' type ;
 
 print_stmt: 'print' '(' expr ')' ';' ;
 
@@ -31,7 +31,7 @@ bool_stmt: bool_expr ';' ;
 
 while_loop: 'while' bool_expr block ;
 
-for_loop: 'for' identifier 'in' tuple ':' type block ;
+for_loop: 'for' IDENTIFIER 'in' tuple ':' type block ;
 
 block: '{' stmt_list '}' ;
 
@@ -41,13 +41,13 @@ expression
     | bool_expr 
     ;
 
-int_expr: int (op int)? ;
+int_expr: INT (INT_OP INT)? ;
 
-str_expr: string ('+' string)? ;
+str_expr: STRING ('+' STRING)? ;
 
 bool_expr
-    : bool_val (bool_binop bool_val)?
-    | bool_op bool_expr 
+    : BOOL (BOOL_BINOP BOOL)?
+    | BOOL_OP bool_expr 
     ;
 
 tuple
@@ -77,19 +77,19 @@ tuple_type: '(' type_list ')' ;
 
 // Lexer Rules
 
-int: '-'? DIGIT+ ;
+INT: '-'? DIGIT+ ;
 
-string: LETTER* ;
+STRING: '"' LETTER* '"' ;
 
-identifier: LETTER LETTER* ;
+IDENTIFIER: LETTER LETTER* ;
 
-bool_val: 'true' | 'false' ;
+BOOL: 'true' | 'false' ;
 
-bool_binop: '||' | '&&' ;
+BOOL_BINOP: '||' | '&&' ;
 
-bool_op: '!' ;
+BOOL_OP: '!' ;
 
-op: '+' | '-' | '*' | '/' ;
+INT_OP: '+' | '-' | '*' | '/' ;
 
 // Fragments
 
