@@ -1,6 +1,6 @@
 grammar RustLike;
 
-prog: stmt_list EOF;
+prog: block EOF;
 
 stmt_list: stmt+ ;
 
