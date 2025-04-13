@@ -1,6 +1,6 @@
 ```
 <digit> ::= "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
-<int> ::= <digit> | <digit> <int> | "-" <int>
+<u32> ::= <digit> | <digit> <u32> 
 
 <letter> ::= "a" | "b" | "c" | ... | "z" | "A" | "B" | ... | "Z"
 <identifier> ::= <letter> <identifier_rest>
@@ -13,14 +13,14 @@
 <bool_expr> ::= <bool> | <bool_expr> <bool_binop> <bool> | <bool_op> <bool_expr>
 <bool_stmt> ::= <bool_expr> ";"
 
-<op> ::= "+" | "-" | "*" | "/"
-<int_expr> ::= <int> | <int_expr> <op> <int>
-<str_expr> ::= <string> | <string> "+" <string>
-<expr> ::= <int_expr> | <str_expr> | <bool_expr>
+<op> ::= "+" | "-" | "*" | "/" | '!=' | "==" | "<" | ">" | "<=" | ">="
+<u32_expr> ::= <u32> | <u32_expr> <op> <u32>
+<str_expr> ::= <string> | <string> "+" <string> 
+<expr> ::= <u32_expr> | <str_expr> | <bool_expr>
 <expr_list> ::= <expr> | <expr> "," <expr>
 <expr_stmt>::= <expression> ";"
 
-<tuple> ::=  "(" <expr_list> ")" | <int_expr> ".." <int_expr>
+<tuple> ::=  "(" <expr_list> ")" 
 
 <type> ::= "()" | "string" | "int" | <tuple_type> | "fn" "("<type_list>")" "->" <type>
 <type_list> ::= <type> | <type> "," <type>
@@ -43,14 +43,16 @@
 <block> ::= "{" <stmt_list> "}"
 ```
 Key idea:
-- Implement rust ownership semantics on heap allocated tuples
+- Implement rust ownership semantics on heap allocated boxed types  (unsure if we should remove tuples from implementation later on for easier memory management)
 - Non-heap allocated structures should be copied and not moved
+- Exiting a scope frees all allocations within the scope at runtime
+- Type checker checks all function calls and keeps track of types that are moved by changing their type to a moved type
+- Borrow checker should compare scopes to determine whether all borrows are valid by annotating the lifetime of each variable in a hashmap -> lifetime should correspond to a different number than the PC, incrementing from 0 according to scope enters and scope exits, should be more loosely linked to time of execution. This has to explore all paths in the program via DFS 
 
 Additional info:
 - All declarations are immutable
 - All declarations are typed explicitly
 - Functions return the value of their last executed statement
-- 1..10 is expanded to tuple (1, 2, ..., 9)
 - strings can only contain alphabetical letters
 - Operator precedence is left to right (!, \*, and / do not have precedence over other operations)
 - Heaps allocate objects that are too large via a linked list
