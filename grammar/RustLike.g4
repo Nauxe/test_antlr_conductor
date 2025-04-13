@@ -36,12 +36,12 @@ for_loop: 'for' IDENTIFIER 'in' tuple ':' type block ;
 block: '{' stmt_list '}' ;
 
 expression
-    : int_expr
+    : u32_expr
     | str_expr
     | bool_expr 
     ;
 
-int_expr: INT (INT_OP INT)? ;
+int_expr: u32 (INT_OP u32)? ;
 
 str_expr: STRING ('+' STRING)? ;
 
@@ -52,13 +52,13 @@ bool_expr
 
 tuple
     : '(' expr_list ')'
-    | int_expr '..' int_expr
+    | u32_expr '..' u32_expr
     ;
 
 expr_list: expr (',' expr)* ;
 
 expr
-    : int_expr
+    : u32_expr
     | str_expr
     | bool_expr 
     ;
@@ -66,7 +66,7 @@ expr
 type 
     : '()'
     | 'string'
-    | 'int'
+    | 'u32'
     | tuple_type
     | 'fn' '(' type_list ')' '->' type 
     ;
@@ -77,7 +77,7 @@ tuple_type: '(' type_list ')' ;
 
 // Lexer Rules
 
-INT: '-'? DIGIT+ ;
+U32: DIGIT+ ;
 
 STRING: '"' LETTER* '"' ;
 
