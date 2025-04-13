@@ -53,6 +53,7 @@ Additional info:
 - 1..10 is expanded to tuple (1, 2, ..., 9)
 - strings can only contain alphabetical letters
 - Operator precedence is left to right (!, \*, and / do not have precedence over other operations)
+- Heaps allocate objects that are too large via a linked list
 
 Possible TODOs:
 - Add rust macros
@@ -60,4 +61,6 @@ Possible TODOs:
 - Add function return statements
 - Add immutable borrows
 - Add iterators? -> Not necessary
+- Add larger size data! (heap memory support)
+- Add boxed data! e.g. boxed ints
 - ...
