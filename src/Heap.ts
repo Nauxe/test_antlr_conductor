@@ -7,6 +7,8 @@ export enum Tag {
   ENVIRONMENT = 5, // Heap allocated
 }
 
+// Heap stores values as tagged lists
+// TODO: Can consider storing values as fat pointers instead 
 const WORD_SIZE = 8;
 export class Heap {
   private data: ArrayBuffer;
@@ -36,12 +38,12 @@ export class Heap {
   // If 4 bytes is not enough for the size required, more words
   // are used on the heap and the second child will point to the 
   // heap memory address of the next part of the data
-  allocate(tag: Tag, size: number): Operand {
+  allocate(tag: Tag, size: number): HeapItem {
     if (this.free == -1 && this.get_tag(this.free) == Tag.FREE) {
       throw new Error("No more space on heap!");
     }
 
-    const op = new Operand(tag, this.free);
+    const op = new HeapItem(tag, this.free);
     for (let i = 4; i < size; i += 4) {
       this.free = this.get_child(this.free, 0);
       if (this.free == -1 && this.get_tag(this.free) == Tag.FREE) {
@@ -72,14 +74,14 @@ export class Heap {
   }
 
   // Allocate an environment
-  allocEnv(frameSize: number): Operand {
+  allocEnv(frameSize: number): HeapItem {
     return this.allocate(Tag.ENVIRONMENT, frameSize);
   }
 
 }
 
 // Type containing either a primitive or an address depending on the tag
-export class Operand {
+export class HeapItem {
   public tag: Tag;
   public operand: number;
 

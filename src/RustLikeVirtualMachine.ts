@@ -1,4 +1,4 @@
-import { Tag, Heap, Operand } from "./Heap"
+import { Tag, Heap, HeapItem } from "./Heap"
 
 export enum Bytecode { // To be put on operand stack
   NOP = 0, // No op
@@ -27,7 +27,7 @@ export enum Bytecode { // To be put on operand stack
 export class RustLikeVirtualMachine {
   private instrs: Inst[];
 
-  private OS: Operand[]; // Operand stack 
+  private OS: HeapItem[]; // HeapItem stack 
   private PC: number;
   private E: number; // Heap address
   private RTS: number[];
@@ -70,7 +70,7 @@ export class RustLikeVirtualMachine {
     this.RTS = [];
     this.E = this.heap.allocEnv(10000); // TODO: Base the value here off the number of variables allocated (find out during compile time)
 
-    while (this.instrs[this.PC].bytecode != Tag.DONE) {
+    while (this.instrs[this.PC].bytecode != Bytecode.DONE) {
       this.step();
     }
   }
@@ -79,9 +79,9 @@ export class RustLikeVirtualMachine {
 
 export class Inst {
   public bytecode: Bytecode;
-  public args: Operand[];
+  public args: HeapItem[];
 
-  constructor(bytecode: Bytecode, ...args: Operand) {
+  constructor(bytecode: Bytecode, ...args: HeapItem) {
     this.bytecode = bytecode;
     for (let i = 0; i < args.length; i++) {
       this.args[i] = args[i]

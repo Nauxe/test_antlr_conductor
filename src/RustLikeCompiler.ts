@@ -1,4 +1,4 @@
-//import { Tag, Operand } from "./Heap";
+//import { Tag, HeapItem } from "./Heap";
 import { Inst } from "./RustLikeVirtualMachine";
 
 export class RustCompiler {
