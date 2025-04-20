@@ -3,7 +3,10 @@ export enum Tag {
   NUMBER = 1, // Primitive
   BOOLEAN = 2, // Primitive
   STRING = 3, // Heap allocated
-  ENVIRONMENT = 4, // Heap allocated
+  CLOSURE = 4,
+  ENVIRONMENT = 5, // Heap allocated
+  // Environments are structured as follows: [Tag, Size, ParentAddr, numBindings, (keyLen, key, valueAddr)...], 
+  // all except key are 1 byte long
 }
 
 export function is_primitive(tag: Tag): boolean {
@@ -112,18 +115,47 @@ export class Heap {
         return this.dataView.getUint8(offset) !== 0;
       case Tag.STRING:
         let chars: string[] = [];
+
         for (let i = 0; i < item.size; ++i) {
           const code = this.dataView.getUint8(offset + i);
           chars.push(String.fromCharCode(code));
         }
         return chars.join('');
       case Tag.ENVIRONMENT:
-        return item.children; // Or some env object if later needed
+        const env: { parentAddr: number | null, bindings: Map<string, number> } = {
+          parentAddr: null,
+          bindings: new Map(),
+        };
+
+        let ptr = offset;
+
+        const parentAddr = this.dataView.getUint8(ptr++);
+        env.parentAddr = parentAddr !== 0xFF ? parentAddr : null;
+
+        const numBindings = this.dataView.getUint8(ptr++);
+
+        for (let i = 0; i < numBindings; ++i) {
+          const keyLen = this.dataView.getUint8(ptr++);
+          let key = '';
+          for (let j = 0; j < keyLen; ++j) {
+            key += String.fromCharCode(this.dataView.getUint8(ptr++));
+          }
+          const valAddr = this.dataView.getUint8(ptr++);
+          env.bindings.set(key, valAddr);
+        }
+
+        return env;
       default:
         throw new Error("Unsupported object type");
     }
   }
 
+  // To allocate an environment with n bindings (where the name of the ith binding has a
+  // size of b_i) and set its data, do
+  // const env = heap.allocEnv(2 + sum(b_i + 2)); -> To allocate the appropriate amount of data 
+  // heap.set_data(env, {parentAddr: parentEnvironmentAddress, bindings: [[name, address], ...]}); 
+  //
+  // Note: parentEnvironmentAddress is undefined for global scope 0xFF
   set_data(item: Item, value: any) {
     const offset = item.value + HEADER_SIZE; // item.value contains an address
     switch (item.tag) {
@@ -139,6 +171,30 @@ export class Heap {
         }
         break;
       case Tag.ENVIRONMENT:
+        const { parentAddr, bindings } = value;
+        let ptr = offset;
+
+        // Store parent environment pointer
+        this.dataView.setUint8(ptr++, parentAddr ?? 0xFF); // 0xFF for null
+
+        // Number of bindings
+        this.dataView.setUint8(ptr++, bindings.length);
+
+        for (const [key, valueAddr] of bindings) {
+          this.dataView.setUint8(ptr++, key.length); // key length
+          for (let i = 0; i < key.length; ++i) {
+            this.dataView.setUint8(ptr++, key.charCodeAt(i));
+          }
+          this.dataView.setUint8(ptr++, valueAddr); // value pointer
+        }
+
+        // Track child addresses
+        const children = bindings.map(([_, addr]) => addr);
+        if (parentAddr !== undefined && parentAddr !== 0xFF) {
+          children.push(parentAddr);
+        }
+
+        item.children = children;
         break; // Assume data is represented by childOffsets
       default:
         throw new Error("Unsupported object type");
@@ -204,7 +260,6 @@ export class Heap {
   allocEnv(frameSize: number): Item {
     return this.allocate(Tag.ENVIRONMENT, frameSize);
   }
-
 }
 
 // Type containing either a primitive or an address depending on the tag
