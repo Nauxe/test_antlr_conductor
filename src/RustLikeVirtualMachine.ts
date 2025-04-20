@@ -29,7 +29,7 @@ export class RustLikeVirtualMachine {
 
   private OS: HeapItem[]; // HeapItem stack 
   private PC: number;
-  private E: number; // Heap address
+  private E: HeapItem; // Heap address
   private RTS: number[];
   private heap: Heap;
 
@@ -81,7 +81,7 @@ export class Inst {
   public bytecode: Bytecode;
   public args: HeapItem[];
 
-  constructor(bytecode: Bytecode, ...args: HeapItem) {
+  constructor(bytecode: Bytecode, ...args: HeapItem[]) {
     this.bytecode = bytecode;
     for (let i = 0; i < args.length; i++) {
       this.args[i] = args[i]
