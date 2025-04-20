@@ -14,7 +14,7 @@ stmt
     | print_stmt
     | if_stmt                  // if‑statement / if‑expression
     | while_loop
-    | for_loop
+//     | for_loop
     | break_stmt               // loop control
     | continue_stmt            // loop control
     | expr_stmt                // any expr as statement
@@ -31,6 +31,12 @@ fn_decl
     : 'fn' IDENTIFIER '(' param_list_opt ')' '->' type block
     ;
 
+param_list_opt 
+    : // empty
+    | param_list;
+param_list: param (',' param)* ;
+param: IDENTIFIER ':' type ;
+
 // ─── Simple statements ───────────────────────────────────────────────────────
 print_stmt      : 'print' '(' expr ')' ';' ;
 break_stmt      : 'break' ';' ;
@@ -40,7 +46,9 @@ expr_stmt       : expr ';' ;
 // ─── Control flow ────────────────────────────────────────────────────────────
 if_stmt     : 'if' expr block ('else' block)? ;
 while_loop  : 'while' expr block ;
-for_loop    : 'for' IDENTIFIER 'in' tuple ':' type block ;
+
+// For loop not necessary for basic implementation, can consider this as a TODO for later
+// for_loop    : 'for' IDENTIFIER 'in' tuple ':' type block ;
 
 block       : '{' stmt_list '}' ;
 
@@ -67,8 +75,12 @@ index_expr     : expr '[' expr ']' ;
 arg_list_opt   : /* empty */ | expr (',' expr)* ;
 if_expr        : 'if' expr block ('else' block)? ;
 array_literal  : '[' (expr (',' expr)*)? ']' ;
-tuple_expr     : '(' expr_list ')' ;
-range_expr     : u32_expr '..' u32_expr ;
+
+// Tuple and range not necessary for basic implementation but we can use them
+// with for loops if we implement for loops
+// tuple_expr     : '(' expr_list ')' ;
+// range_expr     : u32_expr '..' u32_expr ;
+
 expr_list      : expr (',' expr)* ;
 
 // ─── Leaf expressions ────────────────────────────────────────────────────────
@@ -78,14 +90,15 @@ bool_expr  : BOOL ;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type
-    : '()'
+    : '()' // Unit type
     | 'u32'
     | 'string'
-    | '(' type (',' type)+ ')'       // tuple types
+//    | '(' type (',' type)+ ')'       // tuple types
     | 'fn' '(' type_list_opt ')' '->' type
     ;
 
 type_list_opt : /* empty */ | type (',' type)* ;
+
 
 // ─── Lexer ───────────────────────────────────────────────────────────────────
 U32        : DIGIT+ ;
