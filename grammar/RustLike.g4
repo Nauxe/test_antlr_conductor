@@ -1,24 +1,25 @@
 grammar RustLike;
 
+// ─── Entry Point ─────────────────────────────────────────────────────────────
 prog
     : stmt_list EOF
     ;
 
+// ─── Statements ──────────────────────────────────────────────────────────────
 stmt_list
     : stmt+
     ;
 
 stmt
     : decl                     // immutable variable declaration
-    | fn_decl
-    | print_stmt
-    | if_stmt                  // if‑statement / if‑expression
-    | while_loop
-//     | for_loop
-    | break_stmt               // loop control
-    | continue_stmt            // loop control
+    | fn_decl                  // function declaration
+    | print_stmt               // print statement
+    | if_stmt                  // if‑statement
+    | while_loop               // while loop
+    | break_stmt               // break;
+    | continue_stmt            // continue;
     | expr_stmt                // any expr as statement
-    | block
+    | block                    // nested block
     ;
 
 // ─── Declarations ────────────────────────────────────────────────────────────
@@ -32,10 +33,15 @@ fn_decl
     ;
 
 param_list_opt 
-    : // empty
-    | param_list;
-param_list: param (',' param)* ;
-param: IDENTIFIER ':' type ;
+    : /* empty */
+    | param_list
+    ;
+param_list
+    : param (',' param)*
+    ;
+param
+    : IDENTIFIER ':' type
+    ;
 
 // ─── Simple statements ───────────────────────────────────────────────────────
 print_stmt      : 'print' '(' expr ')' ';' ;
@@ -47,60 +53,82 @@ expr_stmt       : expr ';' ;
 if_stmt     : 'if' expr block ('else' block)? ;
 while_loop  : 'while' expr block ;
 
-// For loop not necessary for basic implementation, can consider this as a TODO for later
-// for_loop    : 'for' IDENTIFIER 'in' tuple ':' type block ;
-
-block       : '{' stmt_list '}' ;
+// ─── Blocks ─────────────────────────────────────────────────────────────────
+block
+    : '{' stmt_list '}'
+    ;
 
 // ─── Expressions ─────────────────────────────────────────────────────────────
+// Now a single left‑recursive expr rule, handling:
+//   - unary ops
+//   - suffix indexing:  e[ idx ]
+//   - suffix calls:     f( args )
+//   - binary ops (arithmetic & comparison)
+//   - logical ops
+//   - primary atoms
 expr
+    : BOOL_OP expr                               # unaryExpr
+    | expr '[' expr ']'                          # indexExpr
+    | expr '(' arg_list_opt ')'                  # callExpr
+    | expr INT_OP expr                           # binaryOpExpr
+    | expr BOOL_BINOP expr                       # logicalExpr
+    | primary                                    # primaryExpr
+    ;
+
+primary
     : u32_expr
     | str_expr
     | bool_expr
     | IDENTIFIER
-    | call_expr
-    | index_expr
+    | '(' expr ')'                               // parenthesized
     | if_expr
     | array_literal
     | tuple_expr
     | range_expr
-    | expr INT_OP expr       // binary arithmetic / comparison
-    | expr BOOL_BINOP expr   // logical ops
-    | BOOL_OP expr           // unary !, -
-    | '(' expr ')'
     ;
 
-call_expr      : IDENTIFIER '(' arg_list_opt ')' ;
-index_expr     : expr '[' expr ']' ;
-arg_list_opt   : /* empty */ | expr (',' expr)* ;
-if_expr        : 'if' expr block ('else' block)? ;
-array_literal  : '[' (expr (',' expr)*)? ']' ;
+arg_list_opt
+    : /* empty */
+    | expr (',' expr)*
+    ;
 
-// Tuple and range not necessary for basic implementation but we can use them
-// with for loops if we implement for loops
-// tuple_expr     : '(' expr_list ')' ;
-// range_expr     : u32_expr '..' u32_expr ;
+if_expr
+    : 'if' expr block ('else' block)?
+    ;
 
-expr_list      : expr (',' expr)* ;
+array_literal
+    : '[' (expr (',' expr)*)? ']'
+    ;
 
-// ─── Leaf expressions ────────────────────────────────────────────────────────
+// Tuple literal
+tuple_expr
+    : '(' (expr (',' expr)*)? ')'
+    ;
+
+// Range expression
+range_expr
+    : u32_expr '..' u32_expr
+    ;
+
+// ─── Leaf Expressions ────────────────────────────────────────────────────────
 u32_expr   : U32 ;
 str_expr   : STRING ('+' STRING)? ;
 bool_expr  : BOOL ;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type
-    : '()' // Unit type
+    : '()'                     // unit
     | 'u32'
     | 'string'
-//    | '(' type (',' type)+ ')'       // tuple types
     | 'fn' '(' type_list_opt ')' '->' type
     ;
 
-type_list_opt : /* empty */ | type (',' type)* ;
+type_list_opt
+    : /* empty */ 
+    | type (',' type)*
+    ;
 
-
-// ─── Lexer ───────────────────────────────────────────────────────────────────
+// ─── Lexer Rules ─────────────────────────────────────────────────────────────
 U32        : DIGIT+ ;
 STRING     : '"' (~["\\])* '"' ;
 IDENTIFIER : LETTER LETTER* ;
@@ -112,5 +140,5 @@ BOOL_OP    : '!' ;
 fragment DIGIT  : [0-9] ;
 fragment LETTER : [a-zA-Z] ;
 
-WS            : [ \t\r\n]+ -> skip ;
-LINE_COMMENT  : '//' ~[\r\n]* -> skip ;
+WS           : [ \t\r\n]+ -> skip ;
+LINE_COMMENT : '//' ~[\r\n]* -> skip ;
