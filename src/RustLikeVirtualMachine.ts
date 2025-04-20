@@ -97,10 +97,10 @@ export class RustLikeVirtualMachine {
 
   run(): any {
     this.PC = 0;
-    this.heap = new Heap();
+    this.heap = new Heap(2048);
     this.OS = [];
     this.RTS = [];
-    this.E = this.heap.allocEnv(10000); // TODO: Base the value here off the number of variables allocated (find out during compile time)
+    this.E = this.heap.allocEnv(32); // TODO: Base the value here off the number of variables allocated (find out during compile time)
 
     while (this.instrs[this.PC].bytecode != Bytecode.DONE) {
       this.step();
@@ -110,7 +110,7 @@ export class RustLikeVirtualMachine {
     if (is_primitive(resultItem.tag)) {
       return resultItem.value;
     } else {
-      return this.heap.addr_to_JS_value(resultItem.value); // May be equal to 0?
+      return this.heap.addr_to_JS_value(resultItem.value);
     }
   }
 
