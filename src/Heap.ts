@@ -9,6 +9,9 @@ export enum Tag {
   ENVIRONMENT = 5, // Heap allocated
   // Environments are structured as follows: [Tag, Size, ParentAddr, numBindings, (keyLen, key, valueAddr)...], 
   // all except key are 1 byte long
+  // TODO: Add tuples (only if there is time to do so and find out about how rust manages the memory of tuples)
+  //TUPLE = 4, // Heap allocated 
+  //// Tuples are structured as follows: [Tag, Size, Addresses...]
 }
 
 export function is_primitive(tag: Tag): boolean {
@@ -186,31 +189,31 @@ export class Heap {
         item.children = [value.funcAddr, value.envAddr];
         break;
       case Tag.ENVIRONMENT:
+        // children[0] is offset of parent environment
+        // children[1] is the offset for numBindings
+        // children[i] for i > 1 is the offset for each binding 
         const { parentAddr, bindings } = value;
+
         let ptr = offset;
 
-        // Store parent environment pointer
-        this.dataView.setUint8(ptr++, parentAddr ?? 0xFF); // 0xFF for null
+        // Store parent address
+        this.dataView.setUint8(ptr++, parentAddr ?? 0xFF); // 0xFF = null
+        this.dataView.setUint8(ptr++, bindings.length); // Store number of bindings
 
-        // Number of bindings
-        this.dataView.setUint8(ptr++, bindings.length);
-
-        for (const [key, valueAddr] of bindings) {
+        const children: number[] = [0]; // Offset of parent is 0
+        for (const [key, valAddr] of bindings) {
           this.dataView.setUint8(ptr++, key.length); // key length
-          for (let i = 0; i < key.length; ++i) {
-            this.dataView.setUint8(ptr++, key.charCodeAt(i));
-          }
-          this.dataView.setUint8(ptr++, valueAddr); // value pointer
-        }
 
-        // Track child addresses
-        const children = bindings.map(([_, addr]) => addr);
-        if (parentAddr !== undefined && parentAddr !== 0xFF) {
-          children.push(parentAddr);
+          for (let i = 0; i < key.length; ++i) {
+            this.dataView.setUint8(ptr++, key.charCodeAt(i)); // key chars
+          }
+          this.dataView.setUint8(ptr, valAddr); // Store value address
+          children.push(ptr - offset); // Save offset relative to data section
+          ptr++;
         }
 
         item.children = children;
-        break; // Assume data is represented by childOffsets
+        break;
       default:
         throw new Error("Unsupported object type");
     }
@@ -220,6 +223,15 @@ export class Heap {
     const tag = this.get_tag(addr);
     const size = this.get_size(addr);
     const item = new Item(tag, size, addr); // For heap-allocated, value is addr
+    if (tag === Tag.ENVIRONMENT) {
+      const env = this.get_data(item) as { parentAddr: number | null, bindings: Map<string, number> };
+      const jsEnv: Record<string, any> = {};
+      for (const [key, addr] of env.bindings.entries()) {
+        jsEnv[key] = this.addr_to_JS_value(addr);
+      }
+      jsEnv.__parent = env.parentAddr !== null ? this.addr_to_JS_value(env.parentAddr) : null;
+      return jsEnv;
+    }
     return this.get_data(item);
   }
 
