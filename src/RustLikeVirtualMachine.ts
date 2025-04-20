@@ -1,4 +1,4 @@
-import { Tag, Heap, HeapItem } from "./Heap"
+import { Tag, Heap, Item, is_primitive } from "./Heap"
 
 export enum Bytecode { // To be put on operand stack
   NOP = 0, // No op
@@ -24,12 +24,37 @@ export enum Bytecode { // To be put on operand stack
   FREE = 20,
 }
 
+export const BytecodeArity: Record<Bytecode, number> = {
+  [Bytecode.NOP]: 0, // No op
+  [Bytecode.POP]: 0,
+  [Bytecode.DONE]: 0,
+  [Bytecode.LDCI]: 1, // Load constant integer 
+  [Bytecode.LDCB]: 1, // Load constant boolean
+  [Bytecode.PLUS]: 2,
+  [Bytecode.TIMES]: 2,
+  [Bytecode.NOT]: 1,
+  [Bytecode.AND]: 2,
+  [Bytecode.OR]: 2,
+  [Bytecode.LT]: 2, // Less than
+  [Bytecode.EQ]: 2, // Equal
+  [Bytecode.JOF]: 1, // Jump on false
+  [Bytecode.GOTO]: 1,
+  [Bytecode.LDS]: 1, // Load symbolic
+  [Bytecode.LDFS]: 1, // Load function symbolic
+  [Bytecode.CALL]: 1,
+  [Bytecode.ENTER_SCOPE]: 1,
+  [Bytecode.EXIT_SCOPE]: 1,
+  [Bytecode.ASSIGN]: 2,
+  [Bytecode.FREE]: 1,
+
+}
+
 export class RustLikeVirtualMachine {
   private instrs: Inst[];
 
-  private OS: HeapItem[]; // HeapItem stack 
+  private OS: Item[]; // Item stack 
   private PC: number;
-  private E: HeapItem; // Heap address
+  private E: Item; // Heap address
   private RTS: number[];
   private heap: Heap;
 
@@ -39,7 +64,9 @@ export class RustLikeVirtualMachine {
     // TODO: fill out switch case
     switch (inst.bytecode) {
       case Bytecode.NOP:
+      // Nothing, NOP
       case Bytecode.POP:
+
       case Bytecode.DONE:
       case Bytecode.LDCI:
       case Bytecode.LDCB:
@@ -63,7 +90,12 @@ export class RustLikeVirtualMachine {
     this.PC += 1; // increment program counter
   }
 
-  run() {
+  runInstrs(instrs: Inst[]): any {
+    this.instrs = instrs;
+    return this.run();
+  }
+
+  run(): any {
     this.PC = 0;
     this.heap = new Heap();
     this.OS = [];
@@ -73,15 +105,22 @@ export class RustLikeVirtualMachine {
     while (this.instrs[this.PC].bytecode != Bytecode.DONE) {
       this.step();
     }
+
+    const resultItem: Item = this.OS.pop();
+    if (is_primitive(resultItem.tag)) {
+      return resultItem.value;
+    } else {
+      return this.heap.addr_to_JS_value(resultItem.value); // May be equal to 0?
+    }
   }
 
 }
 
 export class Inst {
   public bytecode: Bytecode;
-  public args: HeapItem[];
+  public args: Item[];
 
-  constructor(bytecode: Bytecode, ...args: HeapItem[]) {
+  constructor(bytecode: Bytecode, ...args: Item[]) {
     this.bytecode = bytecode;
     for (let i = 0; i < args.length; i++) {
       this.args[i] = args[i]
