@@ -1,46 +1,64 @@
 ```
-<digit> ::= "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
-<u32> ::= <digit> | <digit> <u32> 
+<digit>          ::= "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
+<u32>            ::= <digit> | <digit> <u32>
 
-<letter> ::= "a" | "b" | "c" | ... | "z" | "A" | "B" | ... | "Z"
-<identifier> ::= <letter> <identifier_rest>
-<identifier_rest> ::= "" | <letter> <identifier_rest>
-<string> ::= "" | <letter> <string>
+<letter>         ::= "a" | … | "z" | "A" | … | "Z"
+<identifier>     ::= <letter> <identifier_rest>
+<identifier_rest>::= "" | <letter> <identifier_rest>
 
-<bool> ::= "true" | "false"
-<bool_binop> ::= "||" | "&&"
-<bool_op> ::= "!"
-<bool_expr> ::= <bool> | <bool_expr> <bool_binop> <bool> | <bool_op> <bool_expr>
-<bool_stmt> ::= <bool_expr> ";"
+<string>         ::= "" | <letter> <string>
 
-<op> ::= "+" | "-" | "*" | "/" | '!=' | "==" | "<" | ">" | "<=" | ">="
-<u32_expr> ::= <u32> | <u32_expr> <op> <u32>
-<str_expr> ::= <string> | <string> "+" <string> 
-<expr> ::= <u32_expr> | <str_expr> | <bool_expr>
-<expr_list> ::= <expr> | <expr> "," <expr>
-<expr_stmt>::= <expression> ";"
+<bool>           ::= "true" | "false"
+<bool_binop>     ::= "||" | "&&"
+<bool_op>        ::= "!"
+<bool_expr>      ::= <bool>
+                  |  <bool_expr> <bool_binop> <bool>
+                  |  <bool_op> <bool_expr>
+<bool_stmt>      ::= <bool_expr> ";"
 
-<tuple> ::=  "(" <expr_list> ")" 
+<op>             ::= "+" | "-" | "*" | "/" | "!=" | "==" | "<" | ">" | "<=" | ">="
+<u32_expr>       ::= <u32> | <u32_expr> <op> <u32>
+<str_expr>       ::= <string> | <string> "+" <string>
+<expr>           ::= <u32_expr> | <str_expr> | <bool_expr>
+<expr_list>      ::= <expr> | <expr> "," <expr>
+<expr_stmt>      ::= <expr> ";"
 
-<type> ::= "()" | "string" | "int" | <tuple_type> | "fn" "("<type_list>")" "->" <type>
-<type_list> ::= <type> | <type> "," <type>
-<tuple_type> ::= "("<type_list>")"
+<tuple>          ::= "(" <expr_list> ")"
 
-<decl> ::= "let" <identifier> ":" <type> "=" <expression> ";"
+<type>           ::= "()" | "string" | "u32"
+                  |  <tuple_type>
+                  |  "fn" "(" <type_list> ")" "->" <type>
+<type_list>      ::= <type> | <type> "," <type>
+<tuple_type>     ::= "(" <type_list> ")"
+
+<decl>           ::= "let" <identifier> ":" <type> "=" <expr> ";"
 
 <param_list_opt> ::= "" | <param_list>
-<param_list> ::= <identifier> ":" <type> | <identifier> ":" <type> "," <param_list>
+<param_list>     ::= <identifier> ":" <type>
+                  |  <identifier> ":" <type> "," <param_list>
 
-<fn_decl> ::= "fn" <identifier> "(" <param_list_opt> ")" "->" <type> <block>  
+<fn_decl>        ::= "fn" <identifier> "(" <param_list_opt> ")" "->" <type> <block>
 
-<print_stmt> ::= "print" "("<expr>")" ";"
-<while_loop> ::= "while" <bool_expr> <block>
-<for_loop> ::= "for" <identifier> "in" <tuple> ":" <type> <block>
+<print_stmt>     ::= "print" "(" <expr> ")" ";"
+<while_loop>     ::= "while" <bool_expr> <block>
+<for_loop>       ::= "for" <identifier> "in" <tuple> ":" <type> <block>
+<break_stmt>     ::= "break" ";"
+<continue_stmt>  ::= "continue" ";"
 
-<program> ::= <stmt_list>
-<stmt> ::= <expr_stmt> | <decl> | <fn_decl> | <print_stmt> | <bool_stmt>
-<stmt_list> ::= <stmt> | <stmt> <stmt_list>
-<block> ::= "{" <stmt_list> "}"
+<stmt>           ::= <expr_stmt>
+                  |  <decl>
+                  |  <fn_decl>
+                  |  <print_stmt>
+                  |  <bool_stmt>
+                  |  <while_loop>
+                  |  <for_loop>
+                  |  <break_stmt>
+                  |  <continue_stmt>
+                  |  <block>
+
+<stmt_list>      ::= <stmt> | <stmt> <stmt_list>
+<block>          ::= "{" <stmt_list> "}"
+<program>        ::= <stmt_list>
 ```
 Key idea:
 - Implement rust ownership semantics on heap allocated boxed types  (unsure if we should remove tuples from implementation later on for easier memory management)

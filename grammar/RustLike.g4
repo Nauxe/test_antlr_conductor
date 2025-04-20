@@ -9,12 +9,10 @@ stmt_list
     ;
 
 stmt
-    : decl                     // let / let mut
-    | assignment               // reassign mutable bindings
+    : decl                     // immutable variable declaration
     | fn_decl
-    | return_stmt              // early return
     | print_stmt
-    | if_stmt                  // if as statement/expression
+    | if_stmt                  // if‑statement / if‑expression
     | while_loop
     | for_loop
     | break_stmt               // loop control
@@ -23,56 +21,30 @@ stmt
     | block
     ;
 
+// ─── Declarations ────────────────────────────────────────────────────────────
 decl
-    : 'let' ('mut')? IDENTIFIER ':' type '=' expr ';'
+    : 'let' IDENTIFIER ':' type '=' expr ';'
     ;
 
-assignment
-    : IDENTIFIER '=' expr ';'
-    ;
-
+// ─── Functions ───────────────────────────────────────────────────────────────
 fn_decl
     : 'fn' IDENTIFIER '(' param_list_opt ')' '->' type block
     ;
 
-return_stmt
-    : 'return' expr ';'
-    ;
+// ─── Simple statements ───────────────────────────────────────────────────────
+print_stmt      : 'print' '(' expr ')' ';' ;
+break_stmt      : 'break' ';' ;
+continue_stmt   : 'continue' ';' ;
+expr_stmt       : expr ';' ;
 
-print_stmt
-    : 'print' '(' expr ')' ';'
-    ;
+// ─── Control flow ────────────────────────────────────────────────────────────
+if_stmt     : 'if' expr block ('else' block)? ;
+while_loop  : 'while' expr block ;
+for_loop    : 'for' IDENTIFIER 'in' tuple ':' type block ;
 
-if_stmt
-    : 'if' expr block ('else' block)?
-    ;
+block       : '{' stmt_list '}' ;
 
-while_loop
-    : 'while' expr block
-    ;
-
-for_loop
-    : 'for' IDENTIFIER 'in' tuple ':' type block
-    ;
-
-break_stmt
-    : 'break' ';'
-    ;
-
-continue_stmt
-    : 'continue' ';'
-    ;
-
-block
-    : '{' stmt_list '}'
-    ;
-
-expr_stmt
-    : expr ';'
-    ;
-
-// -- Expressions ------------------------------------------------------------
-
+// ─── Expressions ─────────────────────────────────────────────────────────────
 expr
     : u32_expr
     | str_expr
@@ -84,81 +56,45 @@ expr
     | array_literal
     | tuple_expr
     | range_expr
-    | expr INT_OP expr       // binary arithmetic/comparison
+    | expr INT_OP expr       // binary arithmetic / comparison
     | expr BOOL_BINOP expr   // logical ops
     | BOOL_OP expr           // unary !, -
     | '(' expr ')'
     ;
 
-call_expr
-    : IDENTIFIER '(' arg_list_opt ')'
-    ;
+call_expr      : IDENTIFIER '(' arg_list_opt ')' ;
+index_expr     : expr '[' expr ']' ;
+arg_list_opt   : /* empty */ | expr (',' expr)* ;
+if_expr        : 'if' expr block ('else' block)? ;
+array_literal  : '[' (expr (',' expr)*)? ']' ;
+tuple_expr     : '(' expr_list ')' ;
+range_expr     : u32_expr '..' u32_expr ;
+expr_list      : expr (',' expr)* ;
 
-index_expr
-    : expr '[' expr ']'
-    ;
+// ─── Leaf expressions ────────────────────────────────────────────────────────
+u32_expr   : U32 ;
+str_expr   : STRING ('+' STRING)? ;
+bool_expr  : BOOL ;
 
-arg_list_opt
-    :                             // empty
-    | expr (',' expr)*
-    ;
-
-if_expr
-    : 'if' expr block ('else' block)?
-    ;
-
-array_literal
-    : '[' (expr (',' expr)*)? ']'
-    ;
-
-tuple_expr
-    : '(' expr_list ')'
-    ;
-
-range_expr
-    : u32_expr '..' u32_expr
-    ;
-
-expr_list
-    : expr (',' expr)*
-    ;
-
-u32_expr
-    : U32
-    ;
-
-str_expr
-    : STRING ('+' STRING)?
-    ;
-
-bool_expr
-    : BOOL
-    ;
-
-// -- Types ------------------------------------------------------------------
-
+// ─── Types ───────────────────────────────────────────────────────────────────
 type
     : '()'
     | 'u32'
     | 'string'
-    | '(' type (',' type)+ ')'       // multi‑element tuples only
+    | '(' type (',' type)+ ')'       // tuple types
     | 'fn' '(' type_list_opt ')' '->' type
     ;
 
-type_list_opt
-    :                             // empty
-    | type (',' type)*
-    ;
+type_list_opt : /* empty */ | type (',' type)* ;
 
-// -- Lexer Rules ------------------------------------------------------------
-
-U32           : DIGIT+ ;
-STRING        : '"' (~["\\])* '"' ;
-IDENTIFIER    : LETTER LETTER* ;
-BOOL          : 'true' | 'false' ;
-INT_OP        : '+' | '-' | '*' | '/' | '!=' | '==' | '<' | '<=' | '>' | '>=' ;
-BOOL_BINOP    : '||' | '&&' ;
-BOOL_OP       : '!' ;
+// ─── Lexer ───────────────────────────────────────────────────────────────────
+U32        : DIGIT+ ;
+STRING     : '"' (~["\\])* '"' ;
+IDENTIFIER : LETTER LETTER* ;
+BOOL       : 'true' | 'false' ;
+INT_OP     : '+' | '-' | '*' | '/' | '!=' | '==' | '<' | '<=' | '>' | '>=' ;
+BOOL_BINOP : '||' | '&&' ;
+BOOL_OP    : '!' ;
 
 fragment DIGIT  : [0-9] ;
 fragment LETTER : [a-zA-Z] ;
