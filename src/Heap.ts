@@ -1,3 +1,4 @@
+
 export enum Tag {
   FREE = 0,
   NUMBER = 1, // Primitive
@@ -16,6 +17,7 @@ export enum Tag {
   //TUPLE = 4, // Heap allocated 
   //// Tuples are structured as follows: [Tag, Size, Addresses...]
 }
+
 
 export function is_primitive(tag: Tag): boolean {
   return tag === Tag.NUMBER || tag === Tag.BOOLEAN;
@@ -301,8 +303,8 @@ export class Heap {
 export class Item {
   public tag: Tag;
   public size: number;
-  public children: number[]; // Address offsets for children of the heap item on the heap
-  public value: any; // May be a bool or number
+  public children: number[];
+  public value: any;
 
   constructor(tag: Tag, size: number, value: any, children: number[] = []) {
     this.tag = tag;
@@ -317,5 +319,20 @@ export class Item {
     } else {
       return heap.addr_to_JS_value(this.value);
     }
+  }
+}
+
+export function JS_value_to_Item(heap: Heap, v: any): Item {
+  if (typeof v === "number") {
+    return new Item(Tag.NUMBER, 0, v);
+  } else if (typeof v === "boolean") {
+    return new Item(Tag.BOOLEAN, 0, v);
+  } else if (typeof v === "string") {
+    const bytes = v.length;
+    const it = heap.allocate(Tag.STRING, bytes);
+    heap.set_data(it, v);
+    return it;
+  } else {
+    throw new Error(`Cannot convert JS value to Item: ${v}`);
   }
 }

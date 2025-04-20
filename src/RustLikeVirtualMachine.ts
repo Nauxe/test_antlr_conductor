@@ -22,6 +22,7 @@ export enum Bytecode { // To be put on operand stack
   EXIT_SCOPE = 18,
   ASSIGN = 19,
   FREE = 20,
+  PRINT = 0x10
 }
 
 export const BytecodeArity: Record<Bytecode, number> = {
@@ -62,7 +63,7 @@ export class RustLikeVirtualMachine {
     const inst = this.instrs[this.PC];
 
     // TODO: fill out switch case
-    switch (inst.bytecode) {
+    switch (inst.opcode) {
       case Bytecode.NOP:
       // Nothing, NOP
       case Bytecode.POP:
@@ -102,7 +103,7 @@ export class RustLikeVirtualMachine {
     this.RTS = [];
     this.E = this.heap.allocEnv(32); // TODO: Base the value here off the number of variables allocated (find out during compile time)
 
-    while (this.instrs[this.PC].bytecode != Bytecode.DONE) {
+    while (this.instrs[this.PC].opcode != Bytecode.DONE) {
       this.step();
     }
 
@@ -117,13 +118,5 @@ export class RustLikeVirtualMachine {
 }
 
 export class Inst {
-  public bytecode: Bytecode;
-  public args: Item[];
-
-  constructor(bytecode: Bytecode, ...args: Item[]) {
-    this.bytecode = bytecode;
-    for (let i = 0; i < args.length; i++) {
-      this.args[i] = args[i]
-    }
-  }
+  constructor(public opcode: Bytecode, public operand?: any) {}
 }
