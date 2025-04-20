@@ -1,14 +1,24 @@
+import { Bytecode, BytecodeArity, Inst } from "./RustLikeVirtualMachine";
+
 export enum Tag {
   FREE = 0,
   NUMBER = 1, // Primitive
   BOOLEAN = 2, // Primitive
   STRING = 3, // Heap allocated
-  CLOSURE = 4, // Heap allocated
+
   // Closures are structured as follows: [Tag, Size, FunctionAddr, EnvAddr], total of 4 bytes
   // FunctionAddr can be a pointer (an index) to Instr[] in the virtual machine.
-  ENVIRONMENT = 5, // Heap allocated
+  CLOSURE = 4, // Heap allocated
+
+  // Functions are structured as follows: 
+  // [Tag, Size, ArgCount, InstrCount, (InstrBytecode, (InstrArgTag, InstrArgAddr | InstrArgValue)...)...]
+  // Assume that all function parameters do not need to know their child offsets 
+  FUNCTION = 5, // Heap allocated
+
   // Environments are structured as follows: [Tag, Size, ParentAddr, numBindings, (keyLen, key, valueAddr)...], 
   // all except key are 1 byte long
+  ENVIRONMENT = 6, // Heap allocated
+
   // TODO: Add tuples (only if there is time to do so and find out about how rust manages the memory of tuples)
   //TUPLE = 4, // Heap allocated 
   //// Tuples are structured as follows: [Tag, Size, Addresses...]
@@ -113,6 +123,7 @@ export class Heap {
 
   get_data(item: Item) {
     const offset = item.value + HEADER_SIZE; // item.value contains an address
+    let ptr = offset;
     switch (item.tag) {
       case Tag.NUMBER:
         return this.dataView.getUint32(offset, true);
@@ -131,13 +142,33 @@ export class Heap {
         const envAddr = this.dataView.getUint8(offset + 1);
         item.children = [funcAddr, envAddr];
         return { funcAddr, envAddr };
+      case Tag.FUNCTION: {
+        const argCount = this.dataView.getUint8(ptr++);
+        const instrCount = this.dataView.getUint8(ptr++);
+
+        const instructions: Inst[] = [];
+        for (let i = 0; i < instrCount; ++i) {
+          const bytecode: Bytecode = this.dataView.getUint8(ptr++);
+          const args: Item[] = [];
+          for (let j = 0; j < BytecodeArity[bytecode]; ++j) {
+            const tag = this.dataView.getUint8(ptr++);
+            const val = this.dataView.getUint8(ptr++);
+            let size = 0;
+            if (!is_primitive(tag)) {
+              size = this.get_size(val); // Val is address when tag is not primitive
+            }
+            args.push(new Item(tag, size, val));
+          }
+          instructions.push(new Inst(bytecode, ...args));
+        }
+
+        return { argCount, instructions };
+      }
       case Tag.ENVIRONMENT:
         const env: { parentAddr: number | null, bindings: Map<string, number> } = {
           parentAddr: null,
           bindings: new Map(),
         };
-
-        let ptr = offset;
 
         const parentAddr = this.dataView.getUint8(ptr++);
         env.parentAddr = parentAddr !== 0xFF ? parentAddr : null;
@@ -168,6 +199,7 @@ export class Heap {
   // Note: parentEnvironmentAddress is undefined for global scope 0xFF
   set_data(item: Item, value: any) {
     const offset = item.value + HEADER_SIZE; // item.value contains an address
+    let ptr = offset;
     switch (item.tag) {
       case Tag.NUMBER:
         this.dataView.setUint32(offset, value, true);
@@ -188,13 +220,30 @@ export class Heap {
         this.dataView.setUint8(offset + item.children[1], value.envAddr);
         item.children = [value.funcAddr, value.envAddr];
         break;
+      case Tag.FUNCTION:
+        const { argCount, instructions } = value as {
+          argCount: number;
+          instructions: Inst[];
+        };
+
+        this.dataView.setUint8(ptr++, argCount);
+        this.dataView.setUint8(ptr++, instructions.length);
+
+        for (const instr of instructions) {
+          this.dataView.setUint8(ptr++, instr.bytecode);
+          item.children.push(ptr);
+          for (const arg of instr.args) {
+            this.dataView.setUint8(ptr++, arg.tag);
+            this.dataView.setUint8(ptr++, arg.value);
+          }
+        }
+
+        break;
       case Tag.ENVIRONMENT:
         // children[0] is offset of parent environment
         // children[1] is the offset for numBindings
         // children[i] for i > 1 is the offset for each binding 
         const { parentAddr, bindings } = value;
-
-        let ptr = offset;
 
         // Store parent address
         this.dataView.setUint8(ptr++, parentAddr ?? 0xFF); // 0xFF = null
