@@ -1,4 +1,5 @@
-import { Tag, Operand, Inst } from "./RustLikeVirtualMachine";
+//import { Tag, Operand } from "./Heap";
+import { Inst } from "./RustLikeVirtualMachine";
 
 export class RustCompiler {
   private WC: number; // Write counter

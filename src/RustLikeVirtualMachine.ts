@@ -1,4 +1,4 @@
-import { Tag, Heap, Operand } from "Heap.ts"
+import { Tag, Heap, Operand } from "./Heap"
 
 export enum Bytecode { // To be put on operand stack
   NOP = 0, // No op
