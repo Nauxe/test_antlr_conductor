@@ -4,7 +4,9 @@
 ## Memory Management
 Non-primitive types like Strings are stored on the heap. Data structures such as environment frames and closures are also heap allocated.
 
-All items on the heap are represented by a tag, a size, and some data. As Rust's [std::String](https://doc.rust-lang.org/std/string/struct.String.html) is growable, this implementation lets us allocate strings larger than the size of a word. Environments are represented by data containing a pointer to the parent environment and the bindings in the environment. Closures are represented by a pointer to the function address (index of the compiled bytecode instruction where the function begins) and a pointer to the environment the closure was declared in.
+All items on the heap are represented by a tag, a size, and some data. As Rust's [std::String](https://doc.rust-lang.org/std/string/struct.String.html) is growable, this implementation lets us allocate strings larger than the size of a word. Environments are represented by data containing a pointer to the parent environment and the bindings in the environment. 
+
+Closures are represented by a pointer to the function address (index of the compiled bytecode instruction where the function begins) and the variables that appear in the function body, either as captured variables or as parameters to the function. Closures are stack allocated.
 
 ## Closures 
 Assume that no names are declared within closures themselves.
