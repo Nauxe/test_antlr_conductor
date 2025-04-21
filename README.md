@@ -6,6 +6,21 @@ Non-primitive types like Strings are stored on the heap. Data structures such as
 
 All items on the heap are represented by a tag, a size, and some data. As Rust's [std::String](https://doc.rust-lang.org/std/string/struct.String.html) is growable, this implementation lets us allocate strings larger than the size of a word. Environments are represented by data containing a pointer to the parent environment and the bindings in the environment. Closures are represented by a pointer to the function address (index of the compiled bytecode instruction where the function begins) and a pointer to the environment the closure was declared in.
 
+## Closures 
+Assume that no names are declared within closures themselves.
+Heap allocated arguments to functions are always captured by move, there is no support for captures by mutable or immutable references. Closures don't contain any references to an environment due to this, since all heap allocated variables are moved. Primitives are copied.
+
+## Variable bindings 
+Variable bindings are found both in Environments stored on the heap and on Frames stored on the RTS. 
+Variable bindings in Environments are heap allocated, whereas variable bindings on Frames are stack allocated.
+
+- types
+  - u32: stack allocated primitive 
+  - boolean: stack allocated primitive 
+  - function: stack allocated primitive 
+  - String: heap allocated object
+
+LDCC (Load constant closure) captures all external variables used, whereas CALL captures all parameters passed into the closure. Variables will be bound to arguments before external variables and move semantics follow this order.
 
 ---
 # using ANTLR with "SourceAcademy Conductor"
