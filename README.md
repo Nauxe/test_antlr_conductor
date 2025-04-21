@@ -10,7 +10,7 @@ Closures are represented by a pointer to the function address (index of the comp
 
 ## Closures 
 Assume that no names are declared within closures themselves.
-Heap allocated arguments to functions are always captured by move, there is no support for captures by mutable or immutable references. Closures don't contain any references to an environment due to this, since all heap allocated variables are moved. Primitives are copied.
+Heap allocated arguments to functions are always captured by move, there is no support for captures by mutable or immutable references. Closures don't contain any references to an environment due to this, since all heap allocated variables are moved. Primitives are copied. Calling a closure automatically enters the scope of the closure and no ENTER_SCOPE instruction needs to follow.
 
 ## Variable bindings 
 Variable bindings are found both in Environments stored on the heap and on Frames stored on the RTS. 
