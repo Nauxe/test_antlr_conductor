@@ -303,7 +303,7 @@ export class Heap {
 export class Item {
   public tag: Tag;
   public size: number;
-  public children: number[];
+  public children: number[]; // Address offsets for children of the heap item
   public value: any;
 
   constructor(tag: Tag, size: number, value: any, children: number[] = []) {
