@@ -4,10 +4,11 @@ export enum Tag {
   NUMBER = 1, // Primitive
   BOOLEAN = 2, // Primitive
   STRING = 3, // Heap allocated
+  CLOSURE = 4, // Primitive, stack allocated 
 
   // Environments are structured as follows: [Tag, Size, ParentAddr, numBindings, (keyLen, key, valueAddr)...], 
   // all except key are 1 byte long
-  ENVIRONMENT = 4, // Heap allocated
+  ENVIRONMENT = 5, // Heap allocated
 
   // TODO: Add tuples (only if there is time to do so and find out about how rust manages the memory of tuples)
   //TUPLE = 4, // Heap allocated 
@@ -117,9 +118,9 @@ export class Heap {
     let ptr = offset;
     switch (item.tag) {
       case Tag.NUMBER:
-        return this.dataView.getUint32(offset, true);
+        return item.value; // Stack allocated, just get value of item directly
       case Tag.BOOLEAN:
-        return this.dataView.getUint8(offset) !== 0;
+        return item.value; // Stack allocated, just get value of item directly
       case Tag.STRING:
         let chars: string[] = [];
 
@@ -128,6 +129,10 @@ export class Heap {
           chars.push(String.fromCharCode(code));
         }
         return chars.join('');
+      case Tag.CLOSURE:
+        return item.value; // Stack allocated, just get value of item directly
+      case Tag.STRING:
+
       case Tag.ENVIRONMENT:
         const env: { parentAddr: number | null, bindings: Map<string, number> } = {
           parentAddr: null,
@@ -166,15 +171,18 @@ export class Heap {
     let ptr = offset;
     switch (item.tag) {
       case Tag.NUMBER:
-        this.dataView.setUint32(offset, value, true);
+        item.value = value; // Stack allocated, just set value of item directly
         break;
       case Tag.BOOLEAN:
-        this.dataView.setUint8(offset, value ? 1 : 0);
+        item.value = value; // Stack allocated, just set value of item directly
         break;
       case Tag.STRING:
         for (let i = 0; i < value.length; ++i) {
           this.dataView.setUint8(offset + i, value.charCodeAt(i));
         }
+        break;
+      case Tag.CLOSURE:
+        item.value = value as { funcAddr: number, envAddr: number }; // Stack allocated, just set value of item directly
         break;
       case Tag.ENVIRONMENT:
         // children[0] is offset of parent environment
