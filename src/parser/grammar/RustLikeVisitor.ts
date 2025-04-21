@@ -6,27 +6,35 @@ import { AbstractParseTreeVisitor } from "antlr4ng";
 import { ProgContext } from "./RustLikeParser.js";
 import { Stmt_listContext } from "./RustLikeParser.js";
 import { StmtContext } from "./RustLikeParser.js";
-import { Expr_stmtContext } from "./RustLikeParser.js";
 import { DeclContext } from "./RustLikeParser.js";
 import { Fn_declContext } from "./RustLikeParser.js";
 import { Param_list_optContext } from "./RustLikeParser.js";
 import { Param_listContext } from "./RustLikeParser.js";
 import { ParamContext } from "./RustLikeParser.js";
 import { Print_stmtContext } from "./RustLikeParser.js";
-import { Bool_stmtContext } from "./RustLikeParser.js";
+import { Break_stmtContext } from "./RustLikeParser.js";
+import { Continue_stmtContext } from "./RustLikeParser.js";
+import { Expr_stmtContext } from "./RustLikeParser.js";
+import { If_stmtContext } from "./RustLikeParser.js";
 import { While_loopContext } from "./RustLikeParser.js";
-import { For_loopContext } from "./RustLikeParser.js";
 import { BlockContext } from "./RustLikeParser.js";
-import { ExpressionContext } from "./RustLikeParser.js";
-import { Int_exprContext } from "./RustLikeParser.js";
+import { IndexExprContext } from "./RustLikeParser.js";
+import { UnaryExprContext } from "./RustLikeParser.js";
+import { PrimaryExprContext } from "./RustLikeParser.js";
+import { LogicalExprContext } from "./RustLikeParser.js";
+import { BinaryOpExprContext } from "./RustLikeParser.js";
+import { CallExprContext } from "./RustLikeParser.js";
+import { PrimaryContext } from "./RustLikeParser.js";
+import { Arg_list_optContext } from "./RustLikeParser.js";
+import { If_exprContext } from "./RustLikeParser.js";
+import { Array_literalContext } from "./RustLikeParser.js";
+import { Tuple_exprContext } from "./RustLikeParser.js";
+import { Range_exprContext } from "./RustLikeParser.js";
+import { U32_exprContext } from "./RustLikeParser.js";
 import { Str_exprContext } from "./RustLikeParser.js";
 import { Bool_exprContext } from "./RustLikeParser.js";
-import { TupleContext } from "./RustLikeParser.js";
-import { Expr_listContext } from "./RustLikeParser.js";
-import { ExprContext } from "./RustLikeParser.js";
 import { TypeContext } from "./RustLikeParser.js";
-import { Type_listContext } from "./RustLikeParser.js";
-import { Tuple_typeContext } from "./RustLikeParser.js";
+import { Type_list_optContext } from "./RustLikeParser.js";
 
 
 /**
@@ -55,12 +63,6 @@ export class RustLikeVisitor<Result> extends AbstractParseTreeVisitor<Result> {
      * @return the visitor result
      */
     visitStmt?: (ctx: StmtContext) => Result;
-    /**
-     * Visit a parse tree produced by `RustLikeParser.expr_stmt`.
-     * @param ctx the parse tree
-     * @return the visitor result
-     */
-    visitExpr_stmt?: (ctx: Expr_stmtContext) => Result;
     /**
      * Visit a parse tree produced by `RustLikeParser.decl`.
      * @param ctx the parse tree
@@ -98,11 +100,29 @@ export class RustLikeVisitor<Result> extends AbstractParseTreeVisitor<Result> {
      */
     visitPrint_stmt?: (ctx: Print_stmtContext) => Result;
     /**
-     * Visit a parse tree produced by `RustLikeParser.bool_stmt`.
+     * Visit a parse tree produced by `RustLikeParser.break_stmt`.
      * @param ctx the parse tree
      * @return the visitor result
      */
-    visitBool_stmt?: (ctx: Bool_stmtContext) => Result;
+    visitBreak_stmt?: (ctx: Break_stmtContext) => Result;
+    /**
+     * Visit a parse tree produced by `RustLikeParser.continue_stmt`.
+     * @param ctx the parse tree
+     * @return the visitor result
+     */
+    visitContinue_stmt?: (ctx: Continue_stmtContext) => Result;
+    /**
+     * Visit a parse tree produced by `RustLikeParser.expr_stmt`.
+     * @param ctx the parse tree
+     * @return the visitor result
+     */
+    visitExpr_stmt?: (ctx: Expr_stmtContext) => Result;
+    /**
+     * Visit a parse tree produced by `RustLikeParser.if_stmt`.
+     * @param ctx the parse tree
+     * @return the visitor result
+     */
+    visitIf_stmt?: (ctx: If_stmtContext) => Result;
     /**
      * Visit a parse tree produced by `RustLikeParser.while_loop`.
      * @param ctx the parse tree
@@ -110,29 +130,95 @@ export class RustLikeVisitor<Result> extends AbstractParseTreeVisitor<Result> {
      */
     visitWhile_loop?: (ctx: While_loopContext) => Result;
     /**
-     * Visit a parse tree produced by `RustLikeParser.for_loop`.
-     * @param ctx the parse tree
-     * @return the visitor result
-     */
-    visitFor_loop?: (ctx: For_loopContext) => Result;
-    /**
      * Visit a parse tree produced by `RustLikeParser.block`.
      * @param ctx the parse tree
      * @return the visitor result
      */
     visitBlock?: (ctx: BlockContext) => Result;
     /**
-     * Visit a parse tree produced by `RustLikeParser.expression`.
+     * Visit a parse tree produced by the `indexExpr`
+     * labeled alternative in `RustLikeParser.expr`.
      * @param ctx the parse tree
      * @return the visitor result
      */
-    visitExpression?: (ctx: ExpressionContext) => Result;
+    visitIndexExpr?: (ctx: IndexExprContext) => Result;
     /**
-     * Visit a parse tree produced by `RustLikeParser.int_expr`.
+     * Visit a parse tree produced by the `unaryExpr`
+     * labeled alternative in `RustLikeParser.expr`.
      * @param ctx the parse tree
      * @return the visitor result
      */
-    visitInt_expr?: (ctx: Int_exprContext) => Result;
+    visitUnaryExpr?: (ctx: UnaryExprContext) => Result;
+    /**
+     * Visit a parse tree produced by the `primaryExpr`
+     * labeled alternative in `RustLikeParser.expr`.
+     * @param ctx the parse tree
+     * @return the visitor result
+     */
+    visitPrimaryExpr?: (ctx: PrimaryExprContext) => Result;
+    /**
+     * Visit a parse tree produced by the `logicalExpr`
+     * labeled alternative in `RustLikeParser.expr`.
+     * @param ctx the parse tree
+     * @return the visitor result
+     */
+    visitLogicalExpr?: (ctx: LogicalExprContext) => Result;
+    /**
+     * Visit a parse tree produced by the `binaryOpExpr`
+     * labeled alternative in `RustLikeParser.expr`.
+     * @param ctx the parse tree
+     * @return the visitor result
+     */
+    visitBinaryOpExpr?: (ctx: BinaryOpExprContext) => Result;
+    /**
+     * Visit a parse tree produced by the `callExpr`
+     * labeled alternative in `RustLikeParser.expr`.
+     * @param ctx the parse tree
+     * @return the visitor result
+     */
+    visitCallExpr?: (ctx: CallExprContext) => Result;
+    /**
+     * Visit a parse tree produced by `RustLikeParser.primary`.
+     * @param ctx the parse tree
+     * @return the visitor result
+     */
+    visitPrimary?: (ctx: PrimaryContext) => Result;
+    /**
+     * Visit a parse tree produced by `RustLikeParser.arg_list_opt`.
+     * @param ctx the parse tree
+     * @return the visitor result
+     */
+    visitArg_list_opt?: (ctx: Arg_list_optContext) => Result;
+    /**
+     * Visit a parse tree produced by `RustLikeParser.if_expr`.
+     * @param ctx the parse tree
+     * @return the visitor result
+     */
+    visitIf_expr?: (ctx: If_exprContext) => Result;
+    /**
+     * Visit a parse tree produced by `RustLikeParser.array_literal`.
+     * @param ctx the parse tree
+     * @return the visitor result
+     */
+    visitArray_literal?: (ctx: Array_literalContext) => Result;
+    /**
+     * Visit a parse tree produced by `RustLikeParser.tuple_expr`.
+     * @param ctx the parse tree
+     * @return the visitor result
+     */
+    visitTuple_expr?: (ctx: Tuple_exprContext) => Result;
+    /**
+     * Visit a parse tree produced by `RustLikeParser.range_expr`.
+     * @param ctx the parse tree
+     * @return the visitor result
+     */
+    visitRange_expr?: (ctx: Range_exprContext) => Result;
+    /**
+     * Visit a parse tree produced by `RustLikeParser.u32_expr`.
+     * @param ctx the parse tree
+     * @return the visitor result
+     */
+    visitU32_expr?: (ctx: U32_exprContext) => Result;
     /**
      * Visit a parse tree produced by `RustLikeParser.str_expr`.
      * @param ctx the parse tree
@@ -146,40 +232,16 @@ export class RustLikeVisitor<Result> extends AbstractParseTreeVisitor<Result> {
      */
     visitBool_expr?: (ctx: Bool_exprContext) => Result;
     /**
-     * Visit a parse tree produced by `RustLikeParser.tuple`.
-     * @param ctx the parse tree
-     * @return the visitor result
-     */
-    visitTuple?: (ctx: TupleContext) => Result;
-    /**
-     * Visit a parse tree produced by `RustLikeParser.expr_list`.
-     * @param ctx the parse tree
-     * @return the visitor result
-     */
-    visitExpr_list?: (ctx: Expr_listContext) => Result;
-    /**
-     * Visit a parse tree produced by `RustLikeParser.expr`.
-     * @param ctx the parse tree
-     * @return the visitor result
-     */
-    visitExpr?: (ctx: ExprContext) => Result;
-    /**
      * Visit a parse tree produced by `RustLikeParser.type`.
      * @param ctx the parse tree
      * @return the visitor result
      */
     visitType?: (ctx: TypeContext) => Result;
     /**
-     * Visit a parse tree produced by `RustLikeParser.type_list`.
+     * Visit a parse tree produced by `RustLikeParser.type_list_opt`.
      * @param ctx the parse tree
      * @return the visitor result
      */
-    visitType_list?: (ctx: Type_listContext) => Result;
-    /**
-     * Visit a parse tree produced by `RustLikeParser.tuple_type`.
-     * @param ctx the parse tree
-     * @return the visitor result
-     */
-    visitTuple_type?: (ctx: Tuple_typeContext) => Result;
+    visitType_list_opt?: (ctx: Type_list_optContext) => Result;
 }
 
