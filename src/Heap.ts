@@ -17,7 +17,7 @@ export enum Tag {
 
 
 export function is_primitive(tag: Tag): boolean {
-  return tag === Tag.NUMBER || tag === Tag.BOOLEAN;
+  return tag === Tag.NUMBER || tag === Tag.BOOLEAN || tag === Tag.CLOSURE;
 }
 
 // Heap stores values as fat pointers
@@ -308,7 +308,7 @@ export function get_item_data(item: Item, heap?: Heap) {
   }
 }
 
-export function set_data(item: Item, value: any, heap?: Heap) {
+export function set_item_data(item: Item, value: any, heap?: Heap) {
   switch (item.tag) {
     case Tag.NUMBER: // Fallthrough
     case Tag.BOOLEAN:
@@ -333,7 +333,7 @@ export function JS_value_to_Item(heap: Heap, v: any): Item {
   } else if (typeof v === "string") {
     const bytes = v.length;
     const it = heap.allocate(Tag.STRING, bytes);
-    set_data(it, v, heap);
+    set_item_data(it, v, heap);
     return it;
   } else {
     throw new Error(`Cannot convert JS value to Item: ${v}`);
