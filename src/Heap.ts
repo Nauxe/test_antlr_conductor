@@ -15,7 +15,6 @@ export enum Tag {
   //// Tuples are structured as follows: [Tag, Size, Addresses...]
 }
 
-
 export function is_primitive(tag: Tag): boolean {
   return tag === Tag.NUMBER || tag === Tag.BOOLEAN || tag === Tag.CLOSURE;
 }
@@ -143,7 +142,7 @@ export class Heap {
         }
         return chars.join('');
       case Tag.ENVIRONMENT:
-        const env: { parentAddr: number | null, bindings: Map<string, number> } = {
+        const env: EnvironmentValue = {
           parentAddr: null,
           bindings: new Map(),
         };
@@ -265,6 +264,17 @@ export class Heap {
   }
 }
 
+export interface EnvironmentValue {
+  parentAddr: number | null;
+  bindings: Map<string, number>;
+}
+
+export interface ClosureValue {
+  funcAddr: number;
+  envAddr: number;
+  paramNames: string[];
+}
+
 // Type containing either a primitive or an address depending on the tag
 // Primitives will have size of 0 and no children.
 export class Item {
@@ -275,7 +285,8 @@ export class Item {
   // For Tag.NUMBER, value has type number representing the literal value of the item
   // For Tag.STRING, Tag.ENVIRONMENT, value has type number representing the address of the item on the heap.
   // For Tag.BOOLEAN, value has type boolean representing literal value of the item 
-  // For Tag.CLOSURE, value has type {funcAddr: number, envAddr: number}, where funcAddr is an index to an array of all compiled instructions and envAddr is the address of the environment on the heap the closure is declared in  
+  // For Tag.CLOSURE, value has type ClosureValue, where funcAddr is an index to an array of all compiled instructions and envAddr is the address of the environment on the heap the closure is declared in  
+  // For Tag.ENVIRONMENT, value has type EnvironmentValue
   public value: any;
 
   constructor(tag: Tag, size: number, value: any, children: number[] = []) {
@@ -315,7 +326,7 @@ export function set_item_data(item: Item, value: any, heap?: Heap) {
       item.value = value; // Stack allocated, just set value of item directly
       break;
     case Tag.CLOSURE:
-      item.value = value as { funcAddr: number, envAddr: number }; // Stack allocated, just set value of item directly
+      item.value = value as ClosureValue; // Stack allocated, just set value of item directly
       break;
     case Tag.STRING: // Fallthrough
     case Tag.ENVIRONMENT:
