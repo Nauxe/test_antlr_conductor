@@ -51,6 +51,7 @@ export const BytecodeArity: Record<Bytecode, number> = {
   [Bytecode.ASSIGN]: 0,
   [Bytecode.FREE]: 1,
   [Bytecode.LDCC]: 1, // Operand: { funcAddr: number, captures: string[], paramNames: string[] } type, where captures are names of arguments to the function
+  [Bytecode.RET]: 0,
 }
 
 export interface Frame {
@@ -270,11 +271,23 @@ export class RustLikeVirtualMachine {
         this.E = addr_to_Item(this.heap, currentEnv.parentAddr);
         break;
       }
-      case Bytecode.ASSIGN: {
-        // TODO: Broken, make sure it works with RTS primitives
+      case Bytecode.ASSIGN: { // OS should contain an Item bound on either RTS or Environment, inst.operand should be a string identifier to assign the Item to 
         const name = inst.operand as string;
         const val = this.OS.pop()!;
 
+        // Assign to RTS if name refers to a closure Item
+        for (let i = this.RTS.length - 1; i >= 0; i--) {
+          const frame = this.RTS[i];
+          if ('bindings' in frame && frame.bindings.has(name)) {
+            const existing = frame.bindings.get(name)!;
+            if (existing.tag === Tag.CLOSURE) {
+              frame.bindings.set(name, val); // Only update if it's a closure
+              return;
+            }
+          }
+        }
+
+        // Otherwise, assign to environment
         let envItem = this.E;
         while (envItem !== null) {
           const env = this.heap.get_data(envItem) as EnvironmentValue;
