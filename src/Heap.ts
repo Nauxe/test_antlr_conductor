@@ -158,8 +158,9 @@ export class Heap {
           for (let j = 0; j < keyLen; ++j) {
             key += String.fromCharCode(this.dataView.getUint8(ptr++));
           }
-          const valAddr = this.dataView.getUint8(ptr++);
-          env.bindings.set(key, valAddr);
+          const valAddr: number = this.dataView.getUint8(ptr++);
+          const item: Item = addr_to_Item(this, valAddr);
+          env.bindings.set(key, item);
         }
 
         return env;
@@ -266,13 +267,13 @@ export class Heap {
 
 export interface EnvironmentValue {
   parentAddr: number | null;
-  bindings: Map<string, number>;
+  bindings: Map<string, Item>;
 }
 
 export interface ClosureValue {
   funcAddr: number;
-  envAddr: number;
-  paramNames: string[];
+  capturedVars: Map<string, Item>;
+  paramNames: string[]; // Args should be reassigned to these param names inside the function body 
 }
 
 // Type containing either a primitive or an address depending on the tag
