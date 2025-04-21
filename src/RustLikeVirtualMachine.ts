@@ -43,8 +43,8 @@ export const BytecodeArity: Record<Bytecode, number> = {
   [Bytecode.EQ]: 0, // Equal
   [Bytecode.JOF]: 1, // Jump on false
   [Bytecode.GOTO]: 1,
-  [Bytecode.LDHS]: 1, // Load heap symbolic
-  [Bytecode.LDPS]: 1, // Load primitive symbolic from stack
+  [Bytecode.LDHS]: 1, // Load from heap scope
+  [Bytecode.LDPS]: 1, // Load primitive symbolic from stack (only primitive symbolic in the machine is a closure)
   [Bytecode.CALL]: 1,
   [Bytecode.ENTER_SCOPE]: 1, // Operand: Size of scope
   [Bytecode.EXIT_SCOPE]: 1,
@@ -56,7 +56,7 @@ export const BytecodeArity: Record<Bytecode, number> = {
 export interface Frame {
   __return_pc: number;
   __old_env: Item;
-  bindings: Map<string, Item>;
+  bindings: Map<string, Item>; // For closure bindings
 }
 
 export class RustLikeVirtualMachine {
@@ -101,7 +101,7 @@ export class RustLikeVirtualMachine {
         if (typeof inst.operand === 'string') {
           this.OS.push(JS_value_to_Item(this.heap, inst.operand));
         } else {
-          throw new Error("Non boolean found");
+          throw new Error("Non string found");
         }
         break;
       }
@@ -164,14 +164,15 @@ export class RustLikeVirtualMachine {
           const env = this.heap.get_data(envItem) as EnvironmentValue;
           if (env.bindings.has(name)) {
             const item = env.bindings.get(name)!;
-            this.OS.push(item);
+            this.OS.push(item); // Item may be primitive or heap allocated
             break;
           }
           envItem = addr_to_Item(this.heap, env.parentAddr);
         }
-        break;
+
+        throw new Error(`Unbound symbol in heap scope: ${name}`);
       }
-      case Bytecode.LDPS: {
+      case Bytecode.LDPS: { // This should only be used to load closures!
         const name = inst.operand as string;
 
         // Search top-down in RTS (treat as an environment stack)
@@ -195,11 +196,10 @@ export class RustLikeVirtualMachine {
         }
 
         const { funcAddr, capturedVars, paramNames } = fnItem.value as ClosureValue;
-        const argCount: number = paramNames.length;
 
         // Pop args in reverse order
         const args: Item[] = [];
-        for (let i = 0; i < argCount; i++) {
+        for (let i = 0; i < paramNames.length; i++) {
           args.unshift(this.OS.pop()!); // reverse order
         }
 
@@ -210,21 +210,20 @@ export class RustLikeVirtualMachine {
           allBindings.set(name, item);
         }
 
-        // Insert args (can shadow captures) into newBindings
+        // Insert args (or shadow captures if same name) into newBindings
         for (let i = 0; i < paramNames.length; i++) {
           const name = paramNames[i];
-          const item = args[i];
-          allBindings.set(name, item);
+          allBindings.set(name, args[i]);
         }
 
         // TODO: add bindings declared in the function here after scanning them 
 
         // Split bindings into bindings of stack allocated and heap allocated objects
         const heapBindings = new Map<string, Item>();
-        const stackBindings = new Map<string, Item>();
+        const stackBindings = new Map<string, Item>(); // Only closures should be here
 
         for (const [name, item] of allBindings) {
-          if (is_primitive(item.tag)) {
+          if (item.tag === Tag.CLOSURE) {
             stackBindings.set(name, item);
           } else {
             heapBindings.set(name, item);
@@ -254,18 +253,16 @@ export class RustLikeVirtualMachine {
         break;
       }
       case Bytecode.ENTER_SCOPE: {
-        // TODO: Broken, make sure it works with RTS
-        const newEnv = this.heap.allocEnv(8);
+        const newEnv = this.heap.allocEnv(128);
         const newEnvData = {
           parentAddr: this.E,
-          bindings: new Map<string, number>()
+          bindings: new Map<string, Item>()
         };
         this.heap.set_data(newEnv.value, newEnvData);
         this.E = newEnv.value;
         break;
       }
       case Bytecode.EXIT_SCOPE: {
-        // TODO: Broken, make sure it works with RTS
         const currentEnv = this.heap.get_data(this.E) as EnvironmentValue;
         if (currentEnv.parentAddr === null) {
           throw new Error("Cannot exit global scope");
@@ -298,8 +295,9 @@ export class RustLikeVirtualMachine {
         break;
       }
       case Bytecode.LDCC: { // This has to be followed by a CALL instruction
-        const { funcAddr, captures, paramNames } = inst.operand; // captures: string[], can contain all names used in the function
-
+        // captures: string[], paramNames: string[]
+        // captures can contain all names used in the function
+        const { funcAddr, captures, paramNames } = inst.operand;
         const captureMap = new Map<string, Item>();
         for (const name of captures) {
           if (paramNames.includes(name)) {
@@ -313,7 +311,10 @@ export class RustLikeVirtualMachine {
             const env = this.heap.get_data(envItem) as EnvironmentValue;
             if (env.bindings.has(name)) {
               const capturedItem = env.bindings.get(name)!;
-              env.bindings.delete(name); // Move: remove from current env if variable is heap allocated
+              if (!is_primitive(capturedItem.tag)) {
+                env.bindings.delete(name); // Move: remove from current env if variable is heap allocated
+              }
+
               this.heap.set_data(envItem, env); // TODO: Possible Optimization: Shrink size of environment
 
               captureMap.set(name, capturedItem);

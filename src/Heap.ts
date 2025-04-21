@@ -1,4 +1,3 @@
-
 export enum Tag {
   FREE = 0,
   NUMBER = 1, // Primitive
@@ -6,8 +5,9 @@ export enum Tag {
   STRING = 3, // Heap allocated
   CLOSURE = 4, // Primitive, stack allocated 
 
-  // Environments are structured as follows: [Tag, Size, ParentAddr, numBindings, (keyLen, key, valueAddr)...] 
-  // all except key are 1 byte long
+  // Environments are structured as follows: [Tag, Size, ParentAddr, numBindings, [keyLen, key, tag, valueSize, value/addr]...] 
+  // all except key are 1 byte long. Value may be a heap address or primitive depending on tag
+  // key is keyLen bytes long
   ENVIRONMENT = 5, // Heap allocated
 
   // TODO: Add tuples (only if there is time to do so and find out about how rust manages the memory of tuples)
@@ -144,23 +144,32 @@ export class Heap {
       case Tag.ENVIRONMENT:
         const env: EnvironmentValue = {
           parentAddr: null,
-          bindings: new Map(),
+          bindings: new Map<string, Item>(),
         };
 
         const parentAddr = this.dataView.getUint8(ptr++);
         env.parentAddr = parentAddr !== 0xFF ? parentAddr : null;
 
         const numBindings = this.dataView.getUint8(ptr++);
-
         for (let i = 0; i < numBindings; ++i) {
           const keyLen = this.dataView.getUint8(ptr++);
           let key = '';
           for (let j = 0; j < keyLen; ++j) {
             key += String.fromCharCode(this.dataView.getUint8(ptr++));
           }
-          const valAddr: number = this.dataView.getUint8(ptr++);
-          const item: Item = addr_to_Item(this, valAddr);
-          env.bindings.set(key, item);
+
+          const tag: Tag = this.dataView.getUint8(ptr++);
+          const valueSize: number = this.dataView.getUint8(ptr++);
+          let value: any;
+          if (tag === Tag.NUMBER || tag === Tag.BOOLEAN) {
+            value = this.dataView.getUint8(ptr++); // Assume 1-byte values for simplicity
+          } else if (tag === Tag.CLOSURE) {
+            throw new Error("Cannot deserialize closure from heap"); // Closures aren't stored in heap
+          } else {
+            value = this.dataView.getUint8(ptr++); // Get heap addr
+          }
+
+          env.bindings.set(key, new Item(tag, valueSize, value));
         }
 
         return env;
@@ -187,22 +196,35 @@ export class Heap {
         // children[0] is offset of parent environment
         // children[1] is the offset for numBindings
         // children[i] for i > 1 is the offset for each binding 
-        const { parentAddr, bindings } = value;
+        const { parentAddr, bindings } = value; // bindings is Map<string, Item>
 
         // Store parent address
         this.dataView.setUint8(ptr++, parentAddr ?? 0xFF); // 0xFF = null
         this.dataView.setUint8(ptr++, bindings.length); // Store number of bindings
 
         const children: number[] = [0]; // Offset of parent is 0
-        for (const [key, valAddr] of bindings) {
+        for (const [key, item] of bindings) {
           this.dataView.setUint8(ptr++, key.length); // key length
 
           for (let i = 0; i < key.length; ++i) {
             this.dataView.setUint8(ptr++, key.charCodeAt(i)); // key chars
           }
-          this.dataView.setUint8(ptr, valAddr); // Store value address
-          children.push(ptr - offset); // Save offset relative to data section
-          ptr++;
+
+          // Write tag and size 
+          this.dataView.setUint8(ptr++, item.tag);
+          this.dataView.setUint8(ptr++, item.size);
+
+          // Write value 
+
+          if (item.tag === Tag.NUMBER || item.tag === Tag.BOOLEAN) {
+            this.dataView.setUint8(ptr++, item.value);
+          } else if (item.tag === Tag.CLOSURE) {
+            throw new Error("Cannot serialize closures to heap");
+          } else {
+            this.dataView.setUint8(ptr++, item.value);    // Store heap addr
+          }
+
+          children.push(ptr - offset); // Save offset relative to data section, each child points to the keyLen
         }
 
         item.children = children;
@@ -267,7 +289,7 @@ export class Heap {
 
 export interface EnvironmentValue {
   parentAddr: number | null;
-  bindings: Map<string, Item>;
+  bindings: Map<string, Item>; // Item may be primitive or heap allocated
 }
 
 export interface ClosureValue {
@@ -277,7 +299,7 @@ export interface ClosureValue {
 }
 
 // Type containing either a primitive or an address depending on the tag
-// Primitives will have size of 0 and no children.
+// Primitives will have no children.
 export class Item {
   public tag: Tag;
   public size: number;
@@ -339,9 +361,9 @@ export function set_item_data(item: Item, value: any, heap?: Heap) {
 
 export function JS_value_to_Item(heap: Heap, v: any): Item {
   if (typeof v === "number") {
-    return new Item(Tag.NUMBER, 0, v);
+    return new Item(Tag.NUMBER, 1, v);
   } else if (typeof v === "boolean") {
-    return new Item(Tag.BOOLEAN, 0, v);
+    return new Item(Tag.BOOLEAN, 1, v);
   } else if (typeof v === "string") {
     const bytes = v.length;
     const it = heap.allocate(Tag.STRING, bytes);

@@ -12,14 +12,16 @@ Closures are represented by a pointer to the function address (index of the comp
 Assume that no names are declared within closures themselves.
 Heap allocated arguments to functions are always captured by move, there is no support for captures by mutable or immutable references. Closures don't contain any references to an environment due to this, since all heap allocated variables are moved. Primitives are copied. Calling a closure automatically enters the scope of the closure and no ENTER_SCOPE instruction needs to follow.
 
+Closures live on the operand stack, in the runtime stack, or inside other closures' captured variables map. Closures can reference heap allocated values via variable capture, closures are a runtime structure that are owned by the virtual machine.
+
 ## Variable bindings 
 Variable bindings are found both in Environments stored on the heap and on Frames stored on the RTS. 
 Variable bindings in Environments are heap allocated, whereas variable bindings on Frames are stack allocated.
 
 - types
-  - u32: stack allocated primitive 
-  - boolean: stack allocated primitive 
-  - function: stack allocated primitive 
+  - u32: primitive, stored in environments as literal values 
+  - boolean: primitive, stored in environments as literal values 
+  - function: stack allocated primitive, stored in OS or RTS 
   - String: heap allocated object
 
 LDCC (Load constant closure) captures all external variables used, whereas CALL captures all parameters passed into the closure. Variables will be bound to arguments before external variables and move semantics follow this order.
@@ -66,6 +68,9 @@ print(3 + 4);
 * **Single pass, visitor‑only** – keeps the compiler tiny and easy to extend; adding a new language feature is usually one new visitor override and (maybe) a new byte‑code.
 * **Stack machine** – matches ANTLR’s natural DFS traversal and avoids register allocation.
 * **Heap vs RTS** – mirrors Rust’s “stack vs heap” split; primitives live on frames, growable or shared data live in the heap and are moved into closures.
+
+
+
 ---
 # using ANTLR with "SourceAcademy Conductor"
 
