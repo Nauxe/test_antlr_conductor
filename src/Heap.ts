@@ -5,13 +5,9 @@ export enum Tag {
   BOOLEAN = 2, // Primitive
   STRING = 3, // Heap allocated
 
-  // Closures are structured as follows: [Tag, Size, FunctionAddr, EnvAddr], total of 4 bytes
-  // FunctionAddr can be a pointer (an index) to Instr[] in the virtual machine.
-  CLOSURE = 4, // Heap allocated
-
   // Environments are structured as follows: [Tag, Size, ParentAddr, numBindings, (keyLen, key, valueAddr)...], 
   // all except key are 1 byte long
-  ENVIRONMENT = 5, // Heap allocated
+  ENVIRONMENT = 4, // Heap allocated
 
   // TODO: Add tuples (only if there is time to do so and find out about how rust manages the memory of tuples)
   //TUPLE = 4, // Heap allocated 
@@ -132,11 +128,6 @@ export class Heap {
           chars.push(String.fromCharCode(code));
         }
         return chars.join('');
-      case Tag.CLOSURE:
-        const funcAddr = this.dataView.getUint8(offset);
-        const envAddr = this.dataView.getUint8(offset + 1);
-        item.children = [funcAddr, envAddr];
-        return { funcAddr, envAddr };
       case Tag.ENVIRONMENT:
         const env: { parentAddr: number | null, bindings: Map<string, number> } = {
           parentAddr: null,
@@ -185,14 +176,6 @@ export class Heap {
           this.dataView.setUint8(offset + i, value.charCodeAt(i));
         }
         break;
-      case Tag.CLOSURE:
-        if (!value.funcAddr || value.envAddr === undefined) {
-          throw new Error("CLOSURE requires funcAddr and envAddr");
-        }
-        this.dataView.setUint8(offset + item.children[0], value.funcAddr);
-        this.dataView.setUint8(offset + item.children[1], value.envAddr);
-        item.children = [value.funcAddr, value.envAddr];
-        break;
       case Tag.ENVIRONMENT:
         // children[0] is offset of parent environment
         // children[1] is the offset for numBindings
@@ -226,15 +209,15 @@ export class Heap {
     const tag = this.get_tag(addr);
     const size = this.get_size(addr);
     const item = new Item(tag, size, addr); // For heap-allocated, value is addr
-    if (tag === Tag.ENVIRONMENT) {
-      const env = this.get_data(item) as { parentAddr: number | null, bindings: Map<string, number> };
-      const jsEnv: Record<string, any> = {};
-      for (const [key, addr] of env.bindings.entries()) {
-        jsEnv[key] = this.addr_to_JS_value(addr);
-      }
-      jsEnv.__parent = env.parentAddr !== null ? this.addr_to_JS_value(env.parentAddr) : null;
-      return jsEnv;
-    }
+    //if (tag === Tag.ENVIRONMENT) {
+    //  const env = this.get_data(item) as { parentAddr: number | null, bindings: Map<string, number> };
+    //  const jsEnv: Record<string, any> = {};
+    //  for (const [key, addr] of env.bindings.entries()) {
+    //    jsEnv[key] = this.addr_to_JS_value(addr);
+    //  }
+    //  jsEnv.__parent = env.parentAddr !== null ? this.addr_to_JS_value(env.parentAddr) : null;
+    //  return jsEnv;
+    //}
     return this.get_data(item);
   }
 
@@ -284,12 +267,6 @@ export class Heap {
     this.set_tag(addr, Tag.FREE);
     this.freeList.push(addr);
     this.freeList.sort((a, b) => a - b); // Sort freeList
-  }
-
-  allocClosure(funcAddr: number, envAddr: number): Item {
-    const item: Item = this.allocate(Tag.CLOSURE, 2, [0, 1]);
-    this.set_data(item, { funcAddr: funcAddr, envAddr: envAddr });
-    return item;
   }
 
   // Allocate an environment
