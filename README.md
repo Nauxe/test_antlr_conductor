@@ -22,6 +22,48 @@ Variable bindings in Environments are heap allocated, whereas variable bindings 
 
 LDCC (Load constant closure) captures all external variables used, whereas CALL captures all parameters passed into the closure. Variables will be bound to arguments before external variables and move semantics follow this order.
 
+## The Compiler Pipeline
+
+The *RustLike Compiler* is a single‑pass **visitor** that walks the parse‑tree produced by ANTLR and **directly emits byte‑code** for the virtual machine.  
+Because the VM is stack‑based, every visitor method follows the same simple rule:
+
+> *“Leave the value of the sub‑expression you just compiled on the operand stack.”*
+
+Below is the complete journey from source code to running program.
+
+| Phase | What Happens | Important Files |
+|-------|--------------|-----------------|
+| **1. Lex / Parse** | The grammar in `parser/grammar/RustLike.g4` is fed to **ANTLR 4**, generating `RustLikeLexer.ts`, `RustLikeParser.ts`, and the visitor/ listener bases. | `grammar/RustLike.g4` |
+| **2. AST Visiting** | `RustLikeCompilerVisitor.ts` extends `AbstractParseTreeVisitor`. It overrides only the rules we care about (e.g. `print_stmt`, `while_loop`, `BinaryOpExprContext`). Each override emits one or more `Inst` objects and pushes them onto an in‑memory `instructions` array. | `src/RustLikeCompiler.ts` |
+| **3. Byte‑code Emission** | An `Inst` is just `{ opcode: Bytecode, operand?: any }`.  *Literals* become `LDCI/LDCB/LDCS`; *variables* use `LDHS`; arithmetic is `PLUS` / `TIMES`; control‑flow is `JOF`, `GOTO`, etc. No optimisation passes are performed – the output order directly mirrors the parse‑tree traversal. | `src/RustLikeVirtualMachine.ts` (enum `Bytecode`) |
+| **4. Execution** | The array of `Inst` objects is handed to `RustLikeVirtualMachine.runInstrs()`. The VM executes a fetch‑decode‑execute loop (`step()`), manipulating:<br>• **OS** – operand stack<br>• **RTS** – runtime‑stack of call frames / primitives<br>• **E** – current heap‑environment pointer<br>• **Heap** – growable arena for strings, closures, environments | `src/RustLikeVirtualMachine.ts` |
+| **5. Result** | When the VM reaches `Bytecode.DONE`, it pops the final `Item` from the OS, converts it back to a JavaScript value (using tag info + heap look‑ups) and returns it to the host. |
+
+### A Walk‑through Example
+
+```rust
+print(3 + 4);
+```
+
+1. **Parsing** produces a tree where `print_stmt` → `expr` → `binaryOpExpr( INT_OP '+' )`.
+2. The visitor emits:
+
+   | Instruction | Stack Effect |
+   |-------------|--------------|
+   | `LDCI 3`    | push **3** |
+   | `LDCI 4`    | push **4** |
+   | `PLUS`      | pop 4,3 → push **7** |
+   | `LDPS "println!"` | push the built‑in print closure |
+   | `CALL`      | pop closure & arg, execute host print |
+   | `DONE`      | halt |
+
+3. The VM’s built‑in `println!` closure ultimately calls `console.log`, so **7** is printed.
+
+### Design Choices
+
+* **Single pass, visitor‑only** – keeps the compiler tiny and easy to extend; adding a new language feature is usually one new visitor override and (maybe) a new byte‑code.
+* **Stack machine** – matches ANTLR’s natural DFS traversal and avoids register allocation.
+* **Heap vs RTS** – mirrors Rust’s “stack vs heap” split; primitives live on frames, growable or shared data live in the heap and are moved into closures.
 ---
 # using ANTLR with "SourceAcademy Conductor"
 
