@@ -6,7 +6,7 @@ export enum Tag {
   STRING = 3, // Heap allocated
   CLOSURE = 4, // Primitive, stack allocated 
 
-  // Environments are structured as follows: [Tag, Size, ParentAddr, numBindings, (keyLen, key, valueAddr)...], 
+  // Environments are structured as follows: [Tag, Size, ParentAddr, numBindings, (keyLen, key, valueAddr)...] 
   // all except key are 1 byte long
   ENVIRONMENT = 5, // Heap allocated
 
@@ -271,6 +271,11 @@ export class Item {
   public tag: Tag;
   public size: number;
   public children: number[]; // Address offsets for children of the heap item
+
+  // For Tag.NUMBER, value has type number representing the literal value of the item
+  // For Tag.STRING, Tag.ENVIRONMENT, value has type number representing the address of the item on the heap.
+  // For Tag.BOOLEAN, value has type boolean representing literal value of the item 
+  // For Tag.CLOSURE, value has type {funcAddr: number, envAddr: number}, where funcAddr is an index to an array of all compiled instructions and envAddr is the address of the environment on the heap the closure is declared in  
   public value: any;
 
   constructor(tag: Tag, size: number, value: any, children: number[] = []) {
