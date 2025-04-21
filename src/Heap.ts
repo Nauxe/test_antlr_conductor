@@ -113,26 +113,35 @@ export class Heap {
     this.data[addr + 1] = size;
   }
 
+
+  addr_to_JS_value(addr: number): any {
+    const tag = this.get_tag(addr);
+    const size = this.get_size(addr);
+    const item = new Item(tag, size, addr); // For heap-allocated, value is addr
+    //if (tag === Tag.ENVIRONMENT) {
+    //  const env = this.get_data(item) as { parentAddr: number | null, bindings: Map<string, number> };
+    //  const jsEnv: Record<string, any> = {};
+    //  for (const [key, addr] of env.bindings.entries()) {
+    //    jsEnv[key] = this.addr_to_JS_value(addr);
+    //  }
+    //  jsEnv.__parent = env.parentAddr !== null ? this.addr_to_JS_value(env.parentAddr) : null;
+    //  return jsEnv;
+    //}
+    return this.get_data(item);
+  }
+
   get_data(item: Item) {
     const offset = item.value + HEADER_SIZE; // item.value contains an address
     let ptr = offset;
+
     switch (item.tag) {
-      case Tag.NUMBER:
-        return item.value; // Stack allocated, just get value of item directly
-      case Tag.BOOLEAN:
-        return item.value; // Stack allocated, just get value of item directly
       case Tag.STRING:
         let chars: string[] = [];
-
         for (let i = 0; i < item.size; ++i) {
           const code = this.dataView.getUint8(offset + i);
           chars.push(String.fromCharCode(code));
         }
         return chars.join('');
-      case Tag.CLOSURE:
-        return item.value; // Stack allocated, just get value of item directly
-      case Tag.STRING:
-
       case Tag.ENVIRONMENT:
         const env: { parentAddr: number | null, bindings: Map<string, number> } = {
           parentAddr: null,
@@ -155,9 +164,8 @@ export class Heap {
         }
 
         return env;
-      default:
-        throw new Error("Unsupported object type");
     }
+
   }
 
   // To allocate an environment with n bindings (where the name of the ith binding has a
@@ -170,19 +178,10 @@ export class Heap {
     const offset = item.value + HEADER_SIZE; // item.value contains an address
     let ptr = offset;
     switch (item.tag) {
-      case Tag.NUMBER:
-        item.value = value; // Stack allocated, just set value of item directly
-        break;
-      case Tag.BOOLEAN:
-        item.value = value; // Stack allocated, just set value of item directly
-        break;
       case Tag.STRING:
         for (let i = 0; i < value.length; ++i) {
           this.dataView.setUint8(offset + i, value.charCodeAt(i));
         }
-        break;
-      case Tag.CLOSURE:
-        item.value = value as { funcAddr: number, envAddr: number }; // Stack allocated, just set value of item directly
         break;
       case Tag.ENVIRONMENT:
         // children[0] is offset of parent environment
@@ -208,25 +207,8 @@ export class Heap {
 
         item.children = children;
         break;
-      default:
-        throw new Error("Unsupported object type");
     }
-  }
 
-  addr_to_JS_value(addr: number): any {
-    const tag = this.get_tag(addr);
-    const size = this.get_size(addr);
-    const item = new Item(tag, size, addr); // For heap-allocated, value is addr
-    //if (tag === Tag.ENVIRONMENT) {
-    //  const env = this.get_data(item) as { parentAddr: number | null, bindings: Map<string, number> };
-    //  const jsEnv: Record<string, any> = {};
-    //  for (const [key, addr] of env.bindings.entries()) {
-    //    jsEnv[key] = this.addr_to_JS_value(addr);
-    //  }
-    //  jsEnv.__parent = env.parentAddr !== null ? this.addr_to_JS_value(env.parentAddr) : null;
-    //  return jsEnv;
-    //}
-    return this.get_data(item);
   }
 
   free(addr: number) {
@@ -307,6 +289,37 @@ export class Item {
   }
 }
 
+export function get_item_data(item: Item, heap?: Heap) {
+  switch (item.tag) {
+    case Tag.NUMBER: // Fallthrough
+    case Tag.BOOLEAN: // Fallthrough
+    case Tag.CLOSURE: // Fallthrough
+      return item.value; // Stack allocated, just get value of item directly
+    case Tag.STRING: // Fallthrough
+    case Tag.ENVIRONMENT:
+      return heap.get_data(item);
+    default:
+      throw new Error("Unsupported object type");
+  }
+}
+
+export function set_data(item: Item, value: any, heap?: Heap) {
+  switch (item.tag) {
+    case Tag.NUMBER: // Fallthrough
+    case Tag.BOOLEAN:
+      item.value = value; // Stack allocated, just set value of item directly
+      break;
+    case Tag.CLOSURE:
+      item.value = value as { funcAddr: number, envAddr: number }; // Stack allocated, just set value of item directly
+      break;
+    case Tag.STRING: // Fallthrough
+    case Tag.ENVIRONMENT:
+      heap.set_data(item, value);
+    default:
+      throw new Error("Unsupported object type");
+  }
+}
+
 export function JS_value_to_Item(heap: Heap, v: any): Item {
   if (typeof v === "number") {
     return new Item(Tag.NUMBER, 0, v);
@@ -315,7 +328,7 @@ export function JS_value_to_Item(heap: Heap, v: any): Item {
   } else if (typeof v === "string") {
     const bytes = v.length;
     const it = heap.allocate(Tag.STRING, bytes);
-    heap.set_data(it, v);
+    set_data(it, v, heap);
     return it;
   } else {
     throw new Error(`Cannot convert JS value to Item: ${v}`);
