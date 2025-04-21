@@ -336,3 +336,10 @@ export function JS_value_to_Item(heap: Heap, v: any): Item {
     throw new Error(`Cannot convert JS value to Item: ${v}`);
   }
 }
+
+export function addr_to_Item(heap: Heap, addr: number): Item {
+  const tag: Tag = heap.get_tag(addr);
+  const val: number = addr;
+  const size: number = heap.get_size(addr);
+  return new Item(tag, size, val);
+}
