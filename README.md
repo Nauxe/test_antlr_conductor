@@ -8,11 +8,15 @@ All items on the heap are represented by a tag, a size, and some data. As Rust's
 
 Closures are represented by a pointer to the function address (index of the compiled bytecode instruction where the function begins) and the variables that appear in the function body, either as captured variables or as parameters to the function. Closures are stack allocated.
 
+Closures will always have a return value. If nothing is returned, a value of type Unit will be returned.
+
 ## Closures 
 Assume that no names are declared within closures themselves.
 Heap allocated arguments to functions are always captured by move, there is no support for captures by mutable or immutable references. Closures don't contain any references to an environment due to this, since all heap allocated variables are moved. Primitives are copied. Calling a closure automatically enters the scope of the closure and no ENTER_SCOPE instruction needs to follow.
 
 Closures live on the operand stack, in the runtime stack, or inside other closures' captured variables map. Closures can reference heap allocated values via variable capture, closures are a runtime structure that are owned by the virtual machine.
+
+Closures are not serializable into the heap, so closure in closure captures are done as follows: 
 
 ## Variable bindings 
 Variable bindings are found both in Environments stored on the heap and on Frames stored on the RTS. 
@@ -21,6 +25,7 @@ Variable bindings in Environments are heap allocated, whereas variable bindings 
 - types
   - u32: primitive, stored in environments as literal values 
   - boolean: primitive, stored in environments as literal values 
+  - unit: primitive, not stored anywhere, can only be a possible function result and cannot be assigned to anything or used for anything 
   - function: stack allocated primitive, stored in OS or RTS 
   - String: heap allocated object
 

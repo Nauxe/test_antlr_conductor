@@ -8,7 +8,8 @@ export enum Tag {
   // Environments are structured as follows: [Tag, Size, ParentAddr, numBindings, [keyLen, key, tag, valueSize, value/addr]...] 
   // all except key are 1 byte long. Value may be a heap address or primitive depending on tag
   // key is keyLen bytes long
-  ENVIRONMENT = 5, // Heap allocated
+  ENVIRONMENT = 5, // Heap allocated 
+  UNIT = 6,
 
   // TODO: Add tuples (only if there is time to do so and find out about how rust manages the memory of tuples)
   //TUPLE = 4, // Heap allocated 
@@ -16,7 +17,7 @@ export enum Tag {
 }
 
 export function is_primitive(tag: Tag): boolean {
-  return tag === Tag.NUMBER || tag === Tag.BOOLEAN || tag === Tag.CLOSURE;
+  return tag === Tag.NUMBER || tag === Tag.BOOLEAN || tag === Tag.UNIT || tag === Tag.CLOSURE;
 }
 
 // Heap stores values as fat pointers
@@ -310,6 +311,7 @@ export class Item {
   // For Tag.BOOLEAN, value has type boolean representing literal value of the item 
   // For Tag.CLOSURE, value has type ClosureValue, where funcAddr is an index to an array of all compiled instructions and envAddr is the address of the environment on the heap the closure is declared in  
   // For Tag.ENVIRONMENT, value has type EnvironmentValue
+  // For Tag.UNIT, value is not used and can be set to any value. A UNIT also has size 0
   public value: any;
 
   constructor(tag: Tag, size: number, value: any, children: number[] = []) {

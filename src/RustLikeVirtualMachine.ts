@@ -1,3 +1,4 @@
+import { isNullOrUndefined } from "util";
 import { Tag, Heap, Item, is_primitive, JS_value_to_Item, addr_to_Item, EnvironmentValue, ClosureValue } from "./Heap"
 
 export enum Bytecode { // To be put on operand stack
@@ -24,6 +25,7 @@ export enum Bytecode { // To be put on operand stack
   ASSIGN = 20,
   FREE = 21,
   LDCC = 22, // Load constant closure
+  RET = 23,
 }
 
 // Represents numbers of elements popped from OS to run the instruction 
@@ -73,11 +75,13 @@ export class RustLikeVirtualMachine {
     const inst = this.instrs[this.PC];
 
     switch (inst.opcode) {
-      case Bytecode.NOP:
-      // Nothing, NOP
+      case Bytecode.NOP: {
+        // Nothing, NOP
+        return;
+      }
       case Bytecode.POP: {
         this.OS.pop()!;
-        break;
+        return;
       }
       case Bytecode.DONE: {
         return; // Should not reach this point
@@ -88,7 +92,7 @@ export class RustLikeVirtualMachine {
         } else {
           throw new Error("Non integer found");
         }
-        break;
+        return;
       }
       case Bytecode.LDCB: {
         if (typeof inst.operand === 'boolean') {
@@ -190,6 +194,7 @@ export class RustLikeVirtualMachine {
       }
       case Bytecode.CALL: {
         // Current closure implementation assumes no names are declared within closures themselves
+        // ^ This is related to one TODO below
 
         const fnItem = this.OS.pop()!;
         if (fnItem.tag !== Tag.CLOSURE) {
@@ -368,8 +373,23 @@ export class RustLikeVirtualMachine {
         this.OS.push(closure);
         break;
       }
+      case Bytecode.RET: {
+        const returnValue = this.OS.pop(); // Pop return value (if any)
+        const currentFrame = this.RTS.pop(); // Pop RTS frame
+        if (!currentFrame) throw new Error("Runtime stack underflow on RET");
+
+        // Restore PC and E 
+        this.PC = currentFrame.__return_pc;
+        this.E = currentFrame.__old_env;
+
+        if (returnValue !== undefined) {
+          this.OS.push(returnValue); // Push return value back on OS
+        } else {
+          this.OS.push(new Item(Tag.UNIT, 0, 0));
+        }
+        return;
+      }
     }
-    this.PC += 1; // increment program counter
   }
 
   runInstrs(instrs: Inst[]): any {
@@ -399,10 +419,14 @@ export class RustLikeVirtualMachine {
 
     while (this.instrs[this.PC].opcode != Bytecode.DONE) {
       this.step();
+      this.PC += 1; // increment program counter
     }
 
     const resultItem: Item = this.OS.pop();
-    if (is_primitive(resultItem.tag)) {
+
+    if (!resultItem) {
+      return "()"; // Return unit type
+    } else if (is_primitive(resultItem.tag)) {
       return resultItem.value;
     } else {
       return this.heap.addr_to_JS_value(resultItem.value);
