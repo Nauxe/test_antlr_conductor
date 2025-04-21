@@ -53,13 +53,19 @@ export const BytecodeArity: Record<Bytecode, number> = {
   [Bytecode.LDCC]: 1, // Operand: { funcAddr: number, captures: string[], paramNames: string[] } type, where captures are names of arguments to the function
 }
 
+export interface Frame {
+  __return_pc: number;
+  __old_env: Item;
+  bindings: Map<string, Item>;
+}
+
 export class RustLikeVirtualMachine {
   private instrs: Inst[];
 
   private OS: Item[]; // Item stack 
   private PC: number;
   private E: Item; // Heap address
-  private RTS: Map<string, Item>[]; // A frame is of type Map<string, Item>
+  private RTS: Frame[];
   private heap: Heap;
 
   step() {
@@ -193,44 +199,55 @@ export class RustLikeVirtualMachine {
 
         // Pop args in reverse order
         const args: Item[] = [];
-        for (let i = 0; i < paramNames.length; i++) {
+        for (let i = 0; i < argCount; i++) {
           args.unshift(this.OS.pop()!); // reverse order
         }
 
-        // Create a new environment that extends the function's environment
-        // TODO/Extension: possibly allocate based on amount of space needed for the closure, 
-        // this can be scanned during compilation
-        const newEnv: Item = this.heap.allocEnv(128);
-        const newBindings = new Map<string, Item>();
+        const allBindings = new Map<string, Item>();
 
         // Insert captures into newBindings
         for (const [name, item] of capturedVars.entries()) {
-          newBindings.set(name, item);
+          allBindings.set(name, item);
         }
 
         // Insert args (can shadow captures) into newBindings
         for (let i = 0; i < paramNames.length; i++) {
           const name = paramNames[i];
           const item = args[i];
-          newBindings.set(name, item);
+          allBindings.set(name, item);
         }
 
-        // TODO: add bindings declared in the function here after scanning them
+        // TODO: add bindings declared in the function here after scanning them 
 
+        // Split bindings into bindings of stack allocated and heap allocated objects
+        const heapBindings = new Map<string, Item>();
+        const stackBindings = new Map<string, Item>();
+
+        for (const [name, item] of allBindings) {
+          if (is_primitive(item.tag)) {
+            stackBindings.set(name, item);
+          } else {
+            heapBindings.set(name, item);
+          }
+        }
+
+        // Create a new environment that extends the function's environment
+        // TODO/Extension: possibly allocate based on amount of space needed for the closure, 
+        // this can be scanned during compilation
+        const newEnv: Item = this.heap.allocEnv(128);
         const envData = {
           parentAddr: newEnv,
-          bindings: newBindings,
+          bindings: heapBindings,
         };
-
-        // Optionally bind argument to some known name, e.g. "arg"
-        // You could also store argument names per function in future
         this.heap.set_data(newEnv, envData);
 
         // Save current environment and PC onto RTS
-        this.RTS.push(new Map<string, any>([
-          ["__return_pc", this.PC],
-          ["__old_env", this.E],
-        ]));
+        const newFrame: Frame = {
+          __return_pc: this.PC,
+          __old_env: this.E,
+          bindings: stackBindings,
+        }
+        this.RTS.push(newFrame);
 
         this.E = newEnv.value;
         this.PC = funcAddr - 1; // -1 because PC is incremented after step()
@@ -353,12 +370,18 @@ export class RustLikeVirtualMachine {
     this.RTS = [];
     this.E = this.heap.allocEnv(32); // TODO: Base the value here off the number of variables allocated in the global environment 
 
-    this.RTS.push(new Map<string, Item>([  // Add global frame
-      ["println!",
-        new Item(Tag.CLOSURE,
-          0,
-          <ClosureValue>{ funcAddr: 0, capturedVars: new Map<string, Item>(), paramNames: ['x'] })], // TODO: Add primitive implementation of println into instrs from compiler
-    ]));
+    const global_frame: Frame = {
+      __return_pc: -1,
+      __old_env: undefined,
+      bindings: new Map<string, Item>([  // Add global frame
+        ["println!",
+          new Item(Tag.CLOSURE,
+            0,
+            <ClosureValue>{ funcAddr: 0, capturedVars: new Map<string, Item>(), paramNames: ['x'] })], // TODO: Add primitive implementation of println into instrs from compiler
+      ])
+    };
+
+    this.RTS.push(global_frame);
 
     while (this.instrs[this.PC].opcode != Bytecode.DONE) {
       this.step();
