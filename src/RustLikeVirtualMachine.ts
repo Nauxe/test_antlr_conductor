@@ -215,7 +215,7 @@ export class RustLikeVirtualMachine {
         // ^ This is related to one TODO below
 
         const fnItem = this.OS.pop()!;
-        if (fnItem.tag !== Tag.CLOSURE) {
+        if (fnItem.tag !== Tag.CAPTURED_CLOSURE) {
           throw new Error("CALL expects a closure");
         }
 
