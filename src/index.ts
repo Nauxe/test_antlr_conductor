@@ -1,4 +1,4 @@
 import { initialise } from "conductor/dist/conductor/runner/util/";
-import { RustLikeEvaluator } from "./RustLikeEvalulator";
+import { RustLikeEvaluator } from "./RustLikeEvaluator";
 
-const {runnerPlugin, conduit} = initialise(RustLikeEvaluator);
+const { runnerPlugin, conduit } = initialise(RustLikeEvaluator);
