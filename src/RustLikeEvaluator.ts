@@ -17,29 +17,48 @@ export class RustLikeEvaluator extends BasicEvaluator {
 
   async evaluateChunk(chunk: string): Promise<void> {
     this.executionCount++;
+    let inputStream;
+    let lexer;
+    let tokenStream;
+    let parser;
+    let tree;
+    let visitorResult;
+    let result;
+
     try {
       // Create the lexer and parser
-      const inputStream = CharStream.fromString(chunk);
-      const lexer = new RustLikeLexer(inputStream);
-      const tokenStream = new CommonTokenStream(lexer);
-      const parser = new RustLikeParser(tokenStream);
+      inputStream = CharStream.fromString(chunk);
+      lexer = new RustLikeLexer(inputStream);
+      tokenStream = new CommonTokenStream(lexer);
+      parser = new RustLikeParser(tokenStream);
 
       // Parse the input
-      const tree = parser.prog();
-
-      // TODO: Conduct type checks
-
-      // Compile
-      const visitorResult = this.visitor.visit(tree);
-
-      // Run bytecode on the virtual machine
-      const result = this.VM.runInstrs(this.visitor.instructions);
-
-      // Send the result to the REPL
-      this.conductor.sendOutput(`Result of expression: ${result}`);
+      tree = parser.prog();
     } catch (error) {
       // Handle errors and send them to the REPL
-      this.conductor.sendOutput(`Error: ${error instanceof Error ? error.message : String(error)}`);
+      this.conductor.sendOutput(`Parse error: ${error instanceof Error ? error.message : String(error)}`);
     }
+
+
+    // TODO: Conduct type checks
+
+    // Compile
+    try {
+      visitorResult = this.visitor.visit(tree);
+    } catch (error) {
+      // Handle errors and send them to the REPL
+      this.conductor.sendOutput(`Compile error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    // Run instructions on the virtual machine
+    try {
+      result = this.VM.runInstrs(this.visitor.instructions);
+    } catch (error) {
+      // Handle errors and send them to the REPL
+      this.conductor.sendOutput(`Runtime error: ${error instanceof Error ? error.message : String(error)}`);
+
+    }
+    // Send the result to the REPL
+    this.conductor.sendOutput(`Result of expression: ${result}`);
   }
 }
