@@ -10,6 +10,7 @@ export class RustLikeEvaluator extends BasicEvaluator {
   private executionCount = 0;
   private visitor = new RustLikeCompilerVisitor();
   private VM = new RustLikeVirtualMachine();
+  private isDebug: boolean = true;
 
   constructor(conductor: IRunnerPlugin) {
     super(conductor);
@@ -39,7 +40,6 @@ export class RustLikeEvaluator extends BasicEvaluator {
       this.conductor.sendOutput(`Parse error: ${error instanceof Error ? error.message : String(error)}`);
     }
 
-
     // TODO: Conduct type checks
 
     // Compile
@@ -50,9 +50,12 @@ export class RustLikeEvaluator extends BasicEvaluator {
       this.conductor.sendOutput(`Compile error: ${error instanceof Error ? error.message : String(error)}`);
     }
 
+    if (this.isDebug)
+      this.conductor.sendOutput(`Compiled instructions: ${JSON.stringify(this.visitor.instructions)}`);
+
     // Run instructions on the virtual machine
     try {
-      result = this.VM.runInstrs(this.visitor.instructions);
+      result = this.VM.runInstrs(this.visitor.instructions, this.isDebug);
     } catch (error) {
       // Handle errors and send them to the REPL
       this.conductor.sendOutput(`Runtime error: ${error instanceof Error ? error.message : String(error)}`);
