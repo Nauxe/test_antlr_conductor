@@ -316,6 +316,7 @@ export class Item {
   // For Tag.NUMBER, value has type number representing the literal value of the item
   // For Tag.STRING, Tag.ENVIRONMENT, value has type number representing the address of the item on the heap.
   // For Tag.BOOLEAN, value has type boolean representing literal value of the item 
+  // For Tag.CLOSURE, value has type Closure with similar members as below
   // For Tag.CAPTURED_CLOSURE, value has type CapturedClosureValue, where funcAddr is an index to an array of all compiled instructions and envAddr is the address of the environment on the heap the closure is declared in  
   // For Tag.ENVIRONMENT, value has type EnvironmentValue
   // For Tag.UNIT, value is not used and can be set to any value. A UNIT also has size 0
@@ -323,7 +324,7 @@ export class Item {
 
   constructor(tag: Tag, size: number, value: any, children: number[] = []) {
     this.tag = tag;
-    this.size = size;
+    this.size = size; // Not relevant for primitive types
     this.children = children;
     this.value = value;
   }
