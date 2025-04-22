@@ -21,10 +21,11 @@ export enum Bytecode { // To be put on operand stack
   CALL = 17,
   ENTER_SCOPE = 18,
   EXIT_SCOPE = 19,
-  ASSIGN = 20,
+  ASSIGN = 20, // Assign the value on the operand stack 
   FREE = 21,
   LDCC = 22, // Load constant closure
   RET = 23,
+  DECL = 24, // Declare identifier 
 }
 
 // Represents numbers of elements popped from OS to run the instruction 
@@ -51,8 +52,9 @@ export const BytecodeArity: Record<Bytecode, number> = {
   [Bytecode.EXIT_SCOPE]: 1,
   [Bytecode.ASSIGN]: 0,
   [Bytecode.FREE]: 1,
-  [Bytecode.LDCC]: 1, // Operand: { funcAddr: number, captures: string[], paramNames: string[] } type, where captures are names of arguments to the function
+  [Bytecode.LDCC]: 1,
   [Bytecode.RET]: 0,
+  [Bytecode.DECL]: 0, // Operand: { name: string, type: RustLikeType }
 }
 
 export interface Frame {
@@ -385,7 +387,8 @@ export class RustLikeVirtualMachine {
 
         const closure = new Item(Tag.CAPTURED_CLOSURE, 0, {
           funcAddr,
-          captures: captureMap
+          captures: captureMap,
+          paramNames
         });
 
         this.OS.push(closure);
@@ -406,6 +409,25 @@ export class RustLikeVirtualMachine {
           this.OS.push(new Item(Tag.UNIT, 0, undefined));
         }
         return;
+      }
+      case Bytecode.DECL: {
+        const { name, rustLikeType } = inst.operand!;
+        if (rustLikeType.tag === Tag.CLOSURE) {
+          // If a closure is being declared, push its instruction address value to the OS as a primitive first 
+          const it = this.OS.pop()!;
+
+          if (it.tag !== Tag.NUMBER)
+            throw new Error("New function declared but no instruction access given")
+
+          const currFrame: Frame = this.RTS[this.RTS.length - 1];
+          currFrame.bindings.set(name, new Item(Tag.CLOSURE, 0, <ClosureValue>{
+            funcAddr: it.value, captureNames: rustLikeType.captureNames, paramNames: rustLikeType.paramNames
+          }));
+
+        } else {
+          const curEnv = this.heap.get_data(this.E) as EnvironmentValue;
+          curEnv.bindings.set(name, undefined);
+        }
       }
     }
   }
