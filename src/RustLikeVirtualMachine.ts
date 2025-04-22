@@ -437,6 +437,10 @@ export class RustLikeVirtualMachine {
 
     this.RTS.push(global_frame);
 
+    let result = ""; // Always return a string as a result of execution
+    if (this.isDebug)
+      result += "INSTRUCTIONS: " + JSON.stringify(this.instrs) + "\n\n -------------------------- \n";
+
     // Main loop to step through program
     while (this.instrs[this.PC].opcode != Bytecode.DONE) {
       this.step();
@@ -445,8 +449,8 @@ export class RustLikeVirtualMachine {
 
     const resultItem: Item = this.OS.pop();
 
-    let result = ""; // Always return a string as a result of execution
-    if (this.isDebug) result += "DEBUG: " + this.trace + "\n\n -------------------------- \n";
+    if (this.isDebug)
+      result += "DEBUG: " + this.trace + "\n\n -------------------------- \n";
 
     // Always return a string as a result of execution
     if (!resultItem) { // Nothing on heap, return unit type
