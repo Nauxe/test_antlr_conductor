@@ -461,3 +461,7 @@ export class RustLikeVirtualMachine {
   }
 
 }
+
+export class Inst {
+  constructor(public opcode: Bytecode, public operand?: any) { }
+}
