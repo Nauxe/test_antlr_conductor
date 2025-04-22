@@ -447,7 +447,7 @@ import {
 } from "./Heap";
 
 /* ─── Trace toggle ─── */
-const TRACE = false;        // ⇦ flip to false to silence single‑step logs
+const TRACE = true;        // ⇦ flip to false to silence single‑step logs
 /* ───────────────────── */
 
 export enum Bytecode {
