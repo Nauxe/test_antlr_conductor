@@ -47,11 +47,11 @@ export class RustLikeEvaluator extends BasicEvaluator {
       visitorResult = this.visitor.visit(tree);
     } catch (error) {
       // Handle errors and send them to the REPL
-      this.conductor.sendOutput(`Compile error: ${error instanceof Error ? error.message : String(error)}`);
+      this.conductor.sendOutput(`Compile error: ${error instanceof Error ? error.message : String(error)}\n\n -------------------------- \n`);
     }
 
     if (this.isDebug)
-      this.conductor.sendOutput(`Compiled instructions: ${JSON.stringify(this.visitor.instructions)}`);
+      this.conductor.sendOutput(`Compiled instructions: \n${JSON.stringify(this.visitor.instructions)}`);
 
     // Run instructions on the virtual machine
     try {
@@ -61,7 +61,11 @@ export class RustLikeEvaluator extends BasicEvaluator {
       this.conductor.sendOutput(`Runtime error: ${error instanceof Error ? error.message : String(error)}`);
 
     }
+
+    if (this.isDebug)
+      this.conductor.sendOutput(`DEBUG:\n${result.debugTrace}\n\n -------------------------- \n`);
+
     // Send the result to the REPL
-    this.conductor.sendOutput(`Result of expression: ${result}`);
+    this.conductor.sendOutput(`Result of expression: ${result.value}`);
   }
 }

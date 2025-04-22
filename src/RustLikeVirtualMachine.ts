@@ -432,7 +432,7 @@ export class RustLikeVirtualMachine {
         ["print!",
           new Item(Tag.CLOSURE,
             0,
-            <ClosureValue>{ funcAddr: 0, captureNames: ['x'], paramNames: ['x'] })], // TODO: Add primitive implementation of print! into instrs from compiler
+            <ClosureValue>{ funcAddr: 0, captureNames: ['x'], paramNames: ['x'] })], // TODO: Add primitive implementation of print! into instrs from compiler, will require new opcodes
       ])
     };
 
@@ -446,19 +446,16 @@ export class RustLikeVirtualMachine {
 
     const resultItem: Item = this.OS.pop();
 
-    let result = ""; // Always return a string as a result of execution
-    if (this.isDebug)
-      result += "DEBUG:\n" + this.trace + "\n\n -------------------------- \n";
+    let result = { value: "()", debugTrace: this.trace }; // Always return a value string as a result of execution
 
     // Always return a string as a result of execution
     if (!resultItem) { // Nothing on heap, return unit type
-      result += "()"; // Return unit type
+      result.value = "()"; // Return unit type
     } else if (is_primitive(resultItem.tag)) {
-      result += JSON.stringify(resultItem.value);
+      result.value = JSON.stringify(resultItem.value);
     } else {
-      result += JSON.stringify(this.heap.addr_to_JS_value(resultItem.value));
+      result.value = JSON.stringify(this.heap.addr_to_JS_value(resultItem.value));
     }
-
     return result;
   }
 
