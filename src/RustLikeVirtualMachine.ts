@@ -446,9 +446,9 @@ import {
   addr_to_Item, EnvironmentValue, ClosureValue
 } from "./Heap";
 
-/* ─── Trace toggle ─── */
-const TRACE = true;        // ⇦ flip to false to silence single‑step logs
-/* ───────────────────── */
+/* set to true if you want a step‑by‑step trace appended as well */
+const TRACE             = false;
+const TRACE_BUFFER_SIZE = 10_000;   // avoid insane strings
 
 export enum Bytecode {
   NOP = 0, POP, DONE, LDCI, LDCB, LDCS, PLUS, TIMES, NOT, AND, OR, LT, EQ,
@@ -466,8 +466,6 @@ export class Inst {
   constructor(public opcode: Bytecode, public operand?: any) {}
 }
 
-/* ────────────────────────────────────────────────────────────────────────── */
-
 export class RustLikeVirtualMachine {
   private instrs: Inst[];
   private OS : Item[] = [];
@@ -475,22 +473,25 @@ export class RustLikeVirtualMachine {
   private E : Item;
   private RTS: Frame[] = [];
   private heap: Heap;
+  private trace: string = "";
 
-  /* —————————————————— SINGLE STEP —————————————————— */
+  private pushTrace(line: string) {
+    if (TRACE && this.trace.length < TRACE_BUFFER_SIZE)
+      this.trace += line + "\n";
+  }
+
+  /* STEP – identical semantics, but records trace lines */
   private step() {
     const inst = this.instrs[this.PC];
-
-    if (TRACE) {
-      console.log(
-        `[${String(this.PC).padStart(3)}]`,
-        Bytecode[inst.opcode].padEnd(7),
-        inst.operand ?? "",
-        " OS →",
+    this.pushTrace(
+      `[${String(this.PC).padStart(3)}] ${Bytecode[inst.opcode].padEnd(7)} ${
+        inst.operand ?? ""
+      }  OS→ ${
         this.OS.map(it =>
           is_primitive(it.tag) ? it.value : `<${Tag[it.tag]}>`
-        )
-      );
-    }
+        ).join(" ")
+      }`
+    );
 
 switch (inst.opcode) {
   case Bytecode.NOP: {
@@ -818,27 +819,19 @@ runInstrs(instrs: Inst[]): any {
 }
 
 private run() {
-  /* initialise runtime */
-  this.PC = 0;
-  this.heap = new Heap(2048);
+  /* init */
+  this.trace = "";
+  this.heap  = new Heap(2048);
   this.OS.length = 0;
   this.RTS.length = 0;
-  this.E  = this.heap.allocEnv(32);
-
-  /* stub println! closure in global frame */
+  this.E = this.heap.allocEnv(32);
   this.RTS.push({
     __return_pc : -1,
     __old_env   : undefined as any,
-    bindings    : new Map([
-      ["println!",
-        new Item(Tag.CLOSURE, 0,
-          <ClosureValue>{
-            funcAddr: 0,
-            capturedVars: new Map<string, Item>(),
-            paramNames : ["x"]
-          })
-      ]
-    ])
+    bindings    : new Map([["println!",
+      new Item(Tag.CLOSURE, 0,
+        <ClosureValue>{ funcAddr: 0, capturedVars: new Map(), paramNames:["x"] })
+    ]])
   });
 
   /* main loop */
@@ -847,20 +840,20 @@ private run() {
     this.PC += 1;
   }
 
-  const resultItem = this.OS.pop();
+  const res = this.OS.pop();
+  const summary = {
+    tag : Tag[res?.tag],
+    raw : res?.value,
+    js  : is_primitive(res.tag)
+            ? res.value
+            : this.heap.addr_to_JS_value(res.value)
+  };
 
-  /* —— final dump —— */
-  console.log("DEBUG ▸ final Item", {
-    tag : Tag[resultItem?.tag],
-    raw : resultItem?.value,
-    js  : is_primitive(resultItem.tag)
-            ? resultItem.value
-            : this.heap.addr_to_JS_value(resultItem.value)
-  });
-
-  /* return to host */
-  if (!resultItem)                    return "()";
-  if (is_primitive(resultItem.tag))   return resultItem.value;
-  return this.heap.addr_to_JS_value(resultItem.value);
+  /* Return a STRING so Source Academy prints it */
+  return JSON.stringify(
+    TRACE ? { result: summary, trace: this.trace.split("\n") } : summary,
+    null,
+    2
+  );
 }
 }
