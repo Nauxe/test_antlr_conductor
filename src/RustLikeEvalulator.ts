@@ -16,16 +16,28 @@ export class RustLikeEvaluator extends BasicEvaluator {
   async evaluateChunk(chunk: string): Promise<void> {
     this.executionCount++;
     try {
+      // Create the lexer and parser
       const inputStream = CharStream.fromString(chunk);
       const lexer = new RustLikeLexer(inputStream);
       const tokenStream = new CommonTokenStream(lexer);
       const parser = new RustLikeParser(tokenStream);
 
+      // Parse the input
       const tree = parser.prog();
+
+      // Evaluate the parsed tree
       const result = this.visitor.visit(tree);
 
+      // TODO: Conduct type checks here
+
+      // TODO: Compile
+
+      // TODO: Run bytecode on a virtual machine
+
+      // Send the result to the REPL
       this.conductor.sendOutput(`Result of expression: ${result}`);
     } catch (error) {
+      // Handle errors and send them to the REPL
       this.conductor.sendOutput(`Error: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
