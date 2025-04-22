@@ -2,7 +2,6 @@ import { AbstractParseTreeVisitor } from "antlr4ng";
 import {
   ProgContext,
   Stmt_listContext,
-  StmtContext,
   DeclContext,
   Fn_declContext,
   Print_stmtContext,
@@ -27,10 +26,12 @@ export class RustLikeCompilerVisitor
   implements RustLikeVisitor<Item>
 {
   private heap = new Heap(2048);
+  /** final output for the VM */
   public instructions: Inst[] = [];
 
   protected defaultResult(): Item {
-    return new Item(Tag.NUMBER, 0, 0);
+    // a dummy UNIT value – used only as visitor return value
+    return new Item(Tag.UNIT, 0, 0);
   }
 
   /* ─────────── Top level ─────────── */
@@ -47,34 +48,36 @@ export class RustLikeCompilerVisitor
 
   /* ─────────── Statements ─────────── */
 
-  // `let x : T = expr ;`  →  evaluate expr, discard result
+  // let x : T = expr;
   visitDecl(ctx: DeclContext): Item {
-    this.visit(ctx.expr());
-    this.instructions.push(new Inst(Bytecode.POP));
+    this.visit(ctx.expr());                 // evaluate RHS
+    this.instructions.push(new Inst(Bytecode.POP)); // discard result
     return this.defaultResult();
   }
 
+  /* functions are recognised but not compiled yet */
   visitFn_decl(_ctx: Fn_declContext): Item {
-    // Function compilation not implemented yet.
+    // TODO: implement proper function compilation.
     return this.defaultResult();
   }
 
-  // print(expr);  ->  expr , LDPS "println!" , CALL
+  /* print(expr);  ->  expr · LDPS "println!" · CALL */
   visitPrint_stmt(ctx: Print_stmtContext): Item {
-    this.visit(ctx.expr());                               // argument
-    this.instructions.push(new Inst(Bytecode.LDPS, "println!")); // closure on top
-    this.instructions.push(new Inst(Bytecode.CALL));      // CALL pops closure + arg
+    this.visit(ctx.expr());
+    this.instructions.push(new Inst(Bytecode.LDPS, "println!"));
+    this.instructions.push(new Inst(Bytecode.CALL));
     return this.defaultResult();
   }
 
+  /* while (cond) { body } */
   visitWhile_loop(ctx: While_loopContext): Item {
     const start = this.instructions.length;
-    this.visit(ctx.expr());                // condition
-    const jof = new Inst(Bytecode.JOF, 0); // patched later
+    this.visit(ctx.expr());                       // condition
+    const jof = new Inst(Bytecode.JOF, 0);
     this.instructions.push(jof);
-    this.visit(ctx.block());               // body
+    this.visit(ctx.block());                      // body
     this.instructions.push(new Inst(Bytecode.GOTO, start));
-    jof.operand = this.instructions.length; // jump target
+    jof.operand = this.instructions.length;       // patch jump target
     return this.defaultResult();
   }
 
@@ -85,16 +88,14 @@ export class RustLikeCompilerVisitor
 
   /* ─────────── Expressions ─────────── */
 
-  // expr #primaryExpr  →  just visit the real primary
   visitPrimaryExpr(ctx: PrimaryExprContext): Item {
     return this.visit(ctx.primary());
   }
 
-  // primary rule with literals, identifiers, (...)
   visitPrimary(ctx: PrimaryContext): Item {
-    if (ctx.u32_expr())   return this.visit(ctx.u32_expr()!);
-    if (ctx.str_expr())   return this.visit(ctx.str_expr()!);
-    if (ctx.bool_expr())  return this.visit(ctx.bool_expr()!);
+    if (ctx.u32_expr())  return this.visit(ctx.u32_expr()!);
+    if (ctx.str_expr())  return this.visit(ctx.str_expr()!);
+    if (ctx.bool_expr()) return this.visit(ctx.bool_expr()!);
 
     if (ctx.IDENTIFIER()) {
       const name = ctx.IDENTIFIER()!.getText();
@@ -102,13 +103,11 @@ export class RustLikeCompilerVisitor
       return this.defaultResult();
     }
 
-    // parenthesised / nested expression
-    if (ctx.expr()) return this.visit(ctx.expr()!);
-
+    if (ctx.expr()) return this.visit(ctx.expr()!); // parenthesised
     return this.defaultResult();
   }
 
-  /* leaf literals */
+  /* literals */
   visitU32_expr(ctx: U32_exprContext): Item {
     const val = parseInt(ctx.U32().getText(), 10);
     this.instructions.push(new Inst(Bytecode.LDCI, val));
@@ -116,15 +115,14 @@ export class RustLikeCompilerVisitor
   }
 
   visitStr_expr(ctx: Str_exprContext): Item {
-    const parts = ctx.STRING().map(t => t.getText().slice(1, -1));
-    const full  = parts.join("");                // '+' already in grammar
-    this.instructions.push(new Inst(Bytecode.LDCS, full));
+    const txt = ctx.STRING().map(t => t.getText().slice(1, -1)).join("");
+    this.instructions.push(new Inst(Bytecode.LDCS, txt));
     return this.defaultResult();
   }
 
   visitBool_expr(ctx: Bool_exprContext): Item {
-    const val = ctx.BOOL().getText() === "true";
-    this.instructions.push(new Inst(Bytecode.LDCB, val));
+    const v = ctx.BOOL().getText() === "true";
+    this.instructions.push(new Inst(Bytecode.LDCB, v));
     return this.defaultResult();
   }
 
@@ -135,27 +133,27 @@ export class RustLikeCompilerVisitor
     return this.defaultResult();
   }
 
-  /* arithmetic +, * (extend as needed) */
+  /* arithmetic +  *  (extend as needed) */
   visitBinaryOpExpr(ctx: BinaryOpExprContext): Item {
     this.visit(ctx.expr(0));
     this.visit(ctx.expr(1));
-    const op = ctx.INT_OP().getText();
     this.instructions.push(
-      new Inst(op === "*" ? Bytecode.TIMES : Bytecode.PLUS)
+      new Inst(ctx.INT_OP().getText() === "*" ? Bytecode.TIMES : Bytecode.PLUS)
     );
     return this.defaultResult();
   }
 
-  /* logical &&, || */
+  /* logical && / || */
   visitLogicalExpr(ctx: LogicalExprContext): Item {
     this.visit(ctx.expr(0));
     this.visit(ctx.expr(1));
-    const op = ctx.BOOL_BINOP().getText();
-    this.instructions.push(new Inst(op === "&&" ? Bytecode.AND : Bytecode.OR));
+    this.instructions.push(
+      new Inst(ctx.BOOL_BINOP().getText() === "&&" ? Bytecode.AND : Bytecode.OR)
+    );
     return this.defaultResult();
   }
 
-  /* fallback ‑ recurse */
+  /* fall‑back */
   visitExpr(ctx: ExprContext): Item {
     return this.visitChildren(ctx);
   }

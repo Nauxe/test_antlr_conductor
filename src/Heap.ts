@@ -301,6 +301,7 @@ export interface ClosureValue {
 
 // Type containing either a primitive or an address depending on the tag
 // Primitives will have no children.
+/*
 export class Item {
   public tag: Tag;
   public size: number;
@@ -327,6 +328,18 @@ export class Item {
     } else {
       return heap.addr_to_JS_value(this.value);
     }
+  }
+}*/
+
+export class Item {
+  constructor(
+    public tag: Tag,
+    public size: number,
+    public value: any,
+    public children: number[] = []
+  ) {}
+  to_JS_value(heap: Heap) {
+    return is_primitive(this.tag) ? this.value : heap.addr_to_JS_value(this.value);
   }
 }
 
@@ -362,23 +375,19 @@ export function set_item_data(item: Item, value: any, heap?: Heap) {
 }
 
 export function JS_value_to_Item(heap: Heap, v: any): Item {
-  if (typeof v === "number") {
-    return new Item(Tag.NUMBER, 1, v);
-  } else if (typeof v === "boolean") {
-    return new Item(Tag.BOOLEAN, 1, v);
-  } else if (typeof v === "string") {
-    const bytes = v.length;
-    const it = heap.allocate(Tag.STRING, bytes);
+  if (typeof v === "number")   return new Item(Tag.NUMBER, 1, v);
+  if (typeof v === "boolean")  return new Item(Tag.BOOLEAN, 1, v);
+  if (typeof v === "string")   {
+    const it = heap.allocate(Tag.STRING, v.length);
     set_item_data(it, v, heap);
     return it;
-  } else {
-    throw new Error(`Cannot convert JS value to Item: ${v}`);
   }
+  if (v === undefined)         return new Item(Tag.UNIT, 0, 0);
+  throw new Error("Cannot convert JS value to Item: " + v);
 }
 
 export function addr_to_Item(heap: Heap, addr: number): Item {
-  const tag: Tag = heap.get_tag(addr);
-  const val: number = addr;
-  const size: number = heap.get_size(addr);
-  return new Item(tag, size, val);
+  const tag  = heap.get_tag(addr);
+  const size = heap.get_size(addr);
+  return new Item(tag, size, addr);
 }
