@@ -71,7 +71,7 @@ export class RustLikeVirtualMachine {
   private heap: Heap;
 
   private isDebug: boolean; // Set to false in runInstrs to run without debug 
-  private trace: string;
+  private trace: string = "";
   private TRACE_BUFFER_SIZE: number = 10_000; // Avoid insane strings
 
   private pushTrace(line: string) {
