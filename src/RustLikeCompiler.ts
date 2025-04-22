@@ -23,9 +23,9 @@ import { Bytecode, Inst } from "./RustLikeVirtualMachine";
 
 export class RustLikeCompilerVisitor
   extends AbstractParseTreeVisitor<Item>
-  implements RustLikeVisitor<Item>
-{
+  implements RustLikeVisitor<Item> {
   private heap = new Heap(2048);
+
   /** final output for the VM */
   public instructions: Inst[] = [];
 
@@ -61,10 +61,10 @@ export class RustLikeCompilerVisitor
     return this.defaultResult();
   }
 
-  /* print(expr);  ->  expr · LDPS "println!" · CALL */
+  /* print!(expr);  ->  expr · LDPS "print!" · CALL */
   visitPrint_stmt(ctx: Print_stmtContext): Item {
     this.visit(ctx.expr());
-    this.instructions.push(new Inst(Bytecode.LDPS, "println!"));
+    this.instructions.push(new Inst(Bytecode.LDPS, "print!"));
     this.instructions.push(new Inst(Bytecode.CALL));
     return this.defaultResult();
   }
@@ -93,8 +93,8 @@ export class RustLikeCompilerVisitor
   }
 
   visitPrimary(ctx: PrimaryContext): Item {
-    if (ctx.u32_expr())  return this.visit(ctx.u32_expr()!);
-    if (ctx.str_expr())  return this.visit(ctx.str_expr()!);
+    if (ctx.u32_expr()) return this.visit(ctx.u32_expr()!);
+    if (ctx.str_expr()) return this.visit(ctx.str_expr()!);
     if (ctx.bool_expr()) return this.visit(ctx.bool_expr()!);
 
     if (ctx.IDENTIFIER()) {

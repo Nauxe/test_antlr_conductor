@@ -44,7 +44,7 @@ param
     ;
 
 // ─── Simple statements ───────────────────────────────────────────────────────
-print_stmt      : 'print' '(' expr ')' ';' ;
+print_stmt      : 'print!' '(' expr ')' ';' ;
 break_stmt      : 'break' ';' ;
 continue_stmt   : 'continue' ';' ;
 expr_stmt       : expr ';' ;

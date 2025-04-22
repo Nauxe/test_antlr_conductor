@@ -9,7 +9,7 @@ null
 ')'
 '->'
 ','
-'print'
+'print!'
 'break'
 'continue'
 'if'

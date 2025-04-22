@@ -428,7 +428,7 @@ export class RustLikeVirtualMachine {
       __return_pc: -1,
       __old_env: undefined,
       bindings: new Map<string, Item>([  // Add global frame
-        ["println!",
+        ["print!",
           new Item(Tag.CLOSURE,
             0,
             <ClosureValue>{ funcAddr: 0, capturedVars: new Map<string, Item>(), paramNames: ['x'] })], // TODO: Add primitive implementation of println into instrs from compiler
@@ -447,7 +447,7 @@ export class RustLikeVirtualMachine {
 
     let result = ""; // Always return a string as a result of execution
     if (this.isDebug)
-      result += "DEBUG: " + this.trace + "\n\n -------------------------- \n";
+      result += "DEBUG:\n" + this.trace + "\n\n -------------------------- \n";
 
     // Always return a string as a result of execution
     if (!resultItem) { // Nothing on heap, return unit type
