@@ -4,7 +4,7 @@ import { CharStream, CommonTokenStream } from "antlr4ng";
 import { RustLikeLexer } from "./parser/grammar/RustLikeLexer";
 import { RustLikeParser } from "./parser/grammar/RustLikeParser";
 import { RustLikeCompilerVisitor } from "./RustLikeCompiler";
-import { RustLikeVirtualMachine } from "./RustLikeVirtualMachine";
+import { Bytecode, RustLikeVirtualMachine } from "./RustLikeVirtualMachine";
 
 export class RustLikeEvaluator extends BasicEvaluator {
   private executionCount = 0;
@@ -51,7 +51,9 @@ export class RustLikeEvaluator extends BasicEvaluator {
     }
 
     if (this.isDebug)
-      this.conductor.sendOutput(`Compiled instructions: \n${JSON.stringify(this.visitor.instructions)}\n\n -------------------------- \n`);
+      this.conductor.sendOutput(`Compiled instructions: \n${this.visitor.instructions.map(
+        inst => `[${Bytecode[inst.opcode].padEnd(7)} ${inst.operand ?? ""}]`)
+        }\n\n -------------------------- \n`);
 
     // Run instructions on the virtual machine
     try {
