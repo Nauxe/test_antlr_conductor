@@ -52,7 +52,7 @@ export class RustLikeEvaluator extends BasicEvaluator {
 
     if (this.isDebug)
       this.conductor.sendOutput(`Compiled instructions: \n${this.visitor.instructions.map(
-        inst => `[${Bytecode[inst.opcode].padEnd(7)} ${inst.operand ?? ""}]`)
+        inst => `[${Bytecode[inst.opcode].padEnd(7)} ${inst.operand ?? ""}]\n`)
         }\n\n -------------------------- \n`);
 
     // Run instructions on the virtual machine
