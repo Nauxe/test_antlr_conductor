@@ -445,7 +445,7 @@ import { Tag, Heap, Item, is_primitive, JS_value_to_Item,
   addr_to_Item, EnvironmentValue, ClosureValue } from "./Heap";
 
 /* ─── CONFIG ─────────────────────────────────────────────────────────────── */
-const DEBUG_TRACE = false;  // ← set true to print every instruction executed
+const DEBUG_TRACE = true;  // ← set true to print every instruction executed
 /* ────────────────────────────────────────────────────────────────────────── */
 
 export enum Bytecode {
