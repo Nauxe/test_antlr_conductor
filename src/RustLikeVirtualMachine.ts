@@ -441,52 +441,56 @@ export class Inst {
 }
 
 */
-import { Tag, Heap, Item, is_primitive, JS_value_to_Item,
-  addr_to_Item, EnvironmentValue, ClosureValue } from "./Heap";
+import {
+  Tag, Heap, Item, is_primitive, JS_value_to_Item,
+  addr_to_Item, EnvironmentValue, ClosureValue
+} from "./Heap";
 
-/* ─── CONFIG ─────────────────────────────────────────────────────────────── */
-const DEBUG_TRACE = true;  // ← set true to print every instruction executed
-/* ────────────────────────────────────────────────────────────────────────── */
+/* ─── Trace toggle ─── */
+const TRACE = true;        // ⇦ flip to false to silence single‑step logs
+/* ───────────────────── */
 
 export enum Bytecode {
-NOP = 0, POP, DONE, LDCI, LDCB, LDCS, PLUS, TIMES, NOT, AND, OR, LT, EQ,
-JOF, GOTO, LDHS, LDPS, CALL, ENTER_SCOPE, EXIT_SCOPE,
-ASSIGN, FREE, LDCC, RET
+  NOP = 0, POP, DONE, LDCI, LDCB, LDCS, PLUS, TIMES, NOT, AND, OR, LT, EQ,
+  JOF, GOTO, LDHS, LDPS, CALL, ENTER_SCOPE, EXIT_SCOPE,
+  ASSIGN, FREE, LDCC, RET
 }
 
 export interface Frame {
-__return_pc: number;
-__old_env: Item;
-bindings: Map<string, Item>;
+  __return_pc: number;
+  __old_env : Item;
+  bindings  : Map<string, Item>;
 }
 
 export class Inst {
-constructor(public opcode: Bytecode, public operand?: any) {}
+  constructor(public opcode: Bytecode, public operand?: any) {}
 }
+
+/* ────────────────────────────────────────────────────────────────────────── */
 
 export class RustLikeVirtualMachine {
-private instrs: Inst[];
-private OS: Item[] = [];          // operand stack
-private PC = 0;                   // program counter
-private E: Item;                  // current env (heap addr)
-private RTS: Frame[] = [];        // runtime‑stack
-private heap: Heap;
+  private instrs: Inst[];
+  private OS : Item[] = [];
+  private PC = 0;
+  private E : Item;
+  private RTS: Frame[] = [];
+  private heap: Heap;
 
-/* STEP – executes one instruction, optionally logs a trace line */
-private step() {
-const inst = this.instrs[this.PC];
-if (DEBUG_TRACE) {
-console.log(
- `[TRACE] PC=${this.PC.toString().padStart(3)}  `,
- Bytecode[inst.opcode].padEnd(6),
- inst.operand ?? "",
- "   OS→",
- this.OS.map(it =>
-   is_primitive(it.tag) ? it.value : `<${Tag[it.tag]}>`
- )
-);
-}
-//const inst = this.instrs[this.PC];
+  /* —————————————————— SINGLE STEP —————————————————— */
+  private step() {
+    const inst = this.instrs[this.PC];
+
+    if (TRACE) {
+      console.log(
+        `[${String(this.PC).padStart(3)}]`,
+        Bytecode[inst.opcode].padEnd(7),
+        inst.operand ?? "",
+        " OS →",
+        this.OS.map(it =>
+          is_primitive(it.tag) ? it.value : `<${Tag[it.tag]}>`
+        )
+      );
+    }
 
 switch (inst.opcode) {
   case Bytecode.NOP: {
@@ -808,49 +812,55 @@ switch (inst.opcode) {
 }
 
 /* RUN PROGRAM */
-runInstrs(instrs: Inst[]) {
-this.instrs = instrs;
-return this.run();
+runInstrs(instrs: Inst[]): any {
+  this.instrs = instrs;
+  return this.run();
 }
 
 private run() {
-this.PC   = 0;
-this.heap = new Heap(2048);
-this.OS.length = 0;
-this.RTS.length = 0;
-this.E = this.heap.allocEnv(32);
+  /* initialise runtime */
+  this.PC = 0;
+  this.heap = new Heap(2048);
+  this.OS.length = 0;
+  this.RTS.length = 0;
+  this.E  = this.heap.allocEnv(32);
 
-// global frame with stub println!
-this.RTS.push({
-__return_pc: -1,
-__old_env  : undefined as any,
-bindings   : new Map([
- ["println!", new Item(Tag.CLOSURE, 0,
-   <ClosureValue>{
-     funcAddr: 0,
-     capturedVars: new Map<string, Item>(),
-     paramNames : ["x"]
-   })]
-])
-});
+  /* stub println! closure in global frame */
+  this.RTS.push({
+    __return_pc : -1,
+    __old_env   : undefined as any,
+    bindings    : new Map([
+      ["println!",
+        new Item(Tag.CLOSURE, 0,
+          <ClosureValue>{
+            funcAddr: 0,
+            capturedVars: new Map<string, Item>(),
+            paramNames : ["x"]
+          })
+      ]
+    ])
+  });
 
-while (this.instrs[this.PC].opcode !== Bytecode.DONE) {
-this.step();
-this.PC += 1;
-}
+  /* main loop */
+  while (this.instrs[this.PC].opcode !== Bytecode.DONE) {
+    this.step();
+    this.PC += 1;
+  }
 
-const resultItem = this.OS.pop();
+  const resultItem = this.OS.pop();
 
-/* ───── FINAL DEBUG DUMP ───── */
-console.log("DEBUG ▸ final Item",
-{ tag: Tag[resultItem?.tag], raw: resultItem?.value,
- js: is_primitive(resultItem.tag)
-       ? resultItem.value
-       : this.heap.addr_to_JS_value(resultItem.value) });
+  /* —— final dump —— */
+  console.log("DEBUG ▸ final Item", {
+    tag : Tag[resultItem?.tag],
+    raw : resultItem?.value,
+    js  : is_primitive(resultItem.tag)
+            ? resultItem.value
+            : this.heap.addr_to_JS_value(resultItem.value)
+  });
 
-/* return to host */
-if (!resultItem)         return "()";
-if (is_primitive(resultItem.tag)) return resultItem.value;
-return this.heap.addr_to_JS_value(resultItem.value);
+  /* return to host */
+  if (!resultItem)                    return "()";
+  if (is_primitive(resultItem.tag))   return resultItem.value;
+  return this.heap.addr_to_JS_value(resultItem.value);
 }
 }
