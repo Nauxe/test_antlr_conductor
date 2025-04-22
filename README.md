@@ -16,7 +16,7 @@ Heap allocated arguments to functions are always captured by move, there is no s
 
 Closures live on the operand stack, in the runtime stack, or inside other closures' captured variables map. Closures can reference heap allocated values via variable capture, closures are a runtime structure that are owned by the virtual machine.
 
-Closures are not serializable into the heap, so closure in closure captures are done as follows: 
+Closures are not serializable into the heap, so closure in closure captures are done by copying bindings of closures found on the runtime stack into a new stack frame pushed via a function call. This is done in the CALL instruction. 
 
 ## Variable bindings 
 Variable bindings are found both in Environments stored on the heap and on Frames stored on the RTS. 
