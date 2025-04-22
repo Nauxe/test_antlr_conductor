@@ -4,12 +4,13 @@ export enum Tag {
   BOOLEAN = 2, // Primitive
   STRING = 3, // Heap allocated
   CLOSURE = 4, // Primitive, stack allocated 
+  CAPTURED_CLOSURE = 5,
 
   // Environments are structured as follows: [Tag, Size, ParentAddr, numBindings, [keyLen, key, tag, valueSize, value/addr]...] 
   // all except key are 1 byte long. Value may be a heap address or primitive depending on tag
   // key is keyLen bytes long
-  ENVIRONMENT = 5, // Heap allocated 
-  UNIT = 6,
+  ENVIRONMENT = 6, // Heap allocated 
+  UNIT = 7,
 
   // TODO: Add tuples (only if there is time to do so and find out about how rust manages the memory of tuples)
   //TUPLE = 4, // Heap allocated 
@@ -164,7 +165,7 @@ export class Heap {
           let value: any;
           if (tag === Tag.NUMBER || tag === Tag.BOOLEAN) {
             value = this.dataView.getUint8(ptr++); // Assume 1-byte values for simplicity
-          } else if (tag === Tag.CLOSURE) {
+          } else if (tag === Tag.CLOSURE || tag === Tag.CAPTURED_CLOSURE) {
             throw new Error("Cannot deserialize closure from heap"); // Closures aren't stored in heap
           } else {
             value = this.dataView.getUint8(ptr++); // Get heap addr
@@ -219,7 +220,7 @@ export class Heap {
 
           if (item.tag === Tag.NUMBER || item.tag === Tag.BOOLEAN) {
             this.dataView.setUint8(ptr++, item.value);
-          } else if (item.tag === Tag.CLOSURE) {
+          } else if (item.tag === Tag.CLOSURE || item.tag === Tag.CAPTURED_CLOSURE) {
             throw new Error("Cannot serialize closures to heap");
           } else {
             this.dataView.setUint8(ptr++, item.value);    // Store heap addr
@@ -295,13 +296,18 @@ export interface EnvironmentValue {
 
 export interface ClosureValue {
   funcAddr: number;
+  captureNames: string[];
+  paramNames: string[]; // Args should be reassigned to these param names inside the function body 
+}
+
+export interface CapturedClosureValue {
+  funcAddr: number;
   capturedVars: Map<string, Item>;
   paramNames: string[]; // Args should be reassigned to these param names inside the function body 
 }
 
 // Type containing either a primitive or an address depending on the tag
 // Primitives will have no children.
-/*
 export class Item {
   public tag: Tag;
   public size: number;
@@ -310,7 +316,7 @@ export class Item {
   // For Tag.NUMBER, value has type number representing the literal value of the item
   // For Tag.STRING, Tag.ENVIRONMENT, value has type number representing the address of the item on the heap.
   // For Tag.BOOLEAN, value has type boolean representing literal value of the item 
-  // For Tag.CLOSURE, value has type ClosureValue, where funcAddr is an index to an array of all compiled instructions and envAddr is the address of the environment on the heap the closure is declared in  
+  // For Tag.CAPTURED_CLOSURE, value has type CapturedClosureValue, where funcAddr is an index to an array of all compiled instructions and envAddr is the address of the environment on the heap the closure is declared in  
   // For Tag.ENVIRONMENT, value has type EnvironmentValue
   // For Tag.UNIT, value is not used and can be set to any value. A UNIT also has size 0
   public value: any;
@@ -329,18 +335,6 @@ export class Item {
       return heap.addr_to_JS_value(this.value);
     }
   }
-}*/
-
-export class Item {
-  constructor(
-    public tag: Tag,
-    public size: number,
-    public value: any,
-    public children: number[] = []
-  ) {}
-  to_JS_value(heap: Heap) {
-    return is_primitive(this.tag) ? this.value : heap.addr_to_JS_value(this.value);
-  }
 }
 
 export function get_item_data(item: Item, heap?: Heap) {
@@ -348,6 +342,7 @@ export function get_item_data(item: Item, heap?: Heap) {
     case Tag.NUMBER: // Fallthrough
     case Tag.BOOLEAN: // Fallthrough
     case Tag.CLOSURE: // Fallthrough
+    case Tag.CAPTURED_CLOSURE: // Fallthrough
       return item.value; // Stack allocated, just get value of item directly
     case Tag.STRING: // Fallthrough
     case Tag.ENVIRONMENT:
@@ -360,11 +355,14 @@ export function get_item_data(item: Item, heap?: Heap) {
 export function set_item_data(item: Item, value: any, heap?: Heap) {
   switch (item.tag) {
     case Tag.NUMBER: // Fallthrough
-    case Tag.BOOLEAN:
+    case Tag.BOOLEAN: // Fallthrough
       item.value = value; // Stack allocated, just set value of item directly
       break;
     case Tag.CLOSURE:
       item.value = value as ClosureValue; // Stack allocated, just set value of item directly
+      break;
+    case Tag.CAPTURED_CLOSURE:
+      item.value = value as CapturedClosureValue; // Stack allocated, just set value of item directly
       break;
     case Tag.STRING: // Fallthrough
     case Tag.ENVIRONMENT:
@@ -375,19 +373,19 @@ export function set_item_data(item: Item, value: any, heap?: Heap) {
 }
 
 export function JS_value_to_Item(heap: Heap, v: any): Item {
-  if (typeof v === "number")   return new Item(Tag.NUMBER, 1, v);
-  if (typeof v === "boolean")  return new Item(Tag.BOOLEAN, 1, v);
-  if (typeof v === "string")   {
+  if (typeof v === "number") return new Item(Tag.NUMBER, 1, v);
+  if (typeof v === "boolean") return new Item(Tag.BOOLEAN, 1, v);
+  if (typeof v === "string") {
     const it = heap.allocate(Tag.STRING, v.length);
     set_item_data(it, v, heap);
     return it;
   }
-  if (v === undefined)         return new Item(Tag.UNIT, 0, 0);
+  if (v === undefined) return new Item(Tag.UNIT, 0, 0);
   throw new Error("Cannot convert JS value to Item: " + v);
 }
 
 export function addr_to_Item(heap: Heap, addr: number): Item {
-  const tag  = heap.get_tag(addr);
+  const tag = heap.get_tag(addr);
   const size = heap.get_size(addr);
   return new Item(tag, size, addr);
 }

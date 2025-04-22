@@ -1,4 +1,4 @@
-import { Tag, Heap, Item, is_primitive, JS_value_to_Item, addr_to_Item, EnvironmentValue, ClosureValue } from "./Heap"
+import { Tag, Heap, Item, is_primitive, JS_value_to_Item, addr_to_Item, EnvironmentValue, CapturedClosureValue, ClosureValue } from "./Heap"
 
 export enum Bytecode { // To be put on operand stack
   NOP = 0, // No op
@@ -194,7 +194,8 @@ export class RustLikeVirtualMachine {
 
         throw new Error(`Unbound symbol in heap scope: ${name}`);
       }
-      case Bytecode.LDPS: { // This should only be used to load closures!
+      case Bytecode.LDPS: { // This should only be used to load closures! (uncaptured) 
+        // Call LDCC after to capture appropriate values.
         const name = inst.operand as string;
 
         // Search top-down in RTS (treat as an environment stack)
@@ -218,7 +219,7 @@ export class RustLikeVirtualMachine {
           throw new Error("CALL expects a closure");
         }
 
-        const { funcAddr, capturedVars, paramNames } = fnItem.value as ClosureValue;
+        const { funcAddr, capturedVars, paramNames } = fnItem.value as CapturedClosureValue;
 
         // Pop args in reverse order
         const args: Item[] = [];
@@ -329,12 +330,12 @@ export class RustLikeVirtualMachine {
         }
         break;
       }
-      case Bytecode.LDCC: { // This has to be followed by a CALL instruction
-        // captures: string[], paramNames: string[]
-        // captures can contain all names used in the function
-        const { funcAddr, captures, paramNames } = inst.operand;
+      case Bytecode.LDCC: { // This has to be followed by a CALL instruction and be after a LDPS instruction
+        // captureNames: string[], paramNames: string[]
+        // captureNames contain all names used in the function
+        const { funcAddr, captureNames, paramNames } = this.OS.pop()!.value as ClosureValue;
         const captureMap = new Map<string, Item>();
-        for (const name of captures) {
+        for (const name of captureNames) {
           if (paramNames.includes(name)) {
             continue; // Don't capture, param shadows this variable
           }
@@ -382,7 +383,7 @@ export class RustLikeVirtualMachine {
           }
         }
 
-        const closure = new Item(Tag.CLOSURE, 0, {
+        const closure = new Item(Tag.CAPTURED_CLOSURE, 0, {
           funcAddr,
           captures: captureMap
         });
@@ -431,7 +432,7 @@ export class RustLikeVirtualMachine {
         ["print!",
           new Item(Tag.CLOSURE,
             0,
-            <ClosureValue>{ funcAddr: 0, capturedVars: new Map<string, Item>(), paramNames: ['x'] })], // TODO: Add primitive implementation of println into instrs from compiler
+            <ClosureValue>{ funcAddr: 0, captureNames: ['x'], paramNames: ['x'] })], // TODO: Add primitive implementation of print! into instrs from compiler
       ])
     };
 
