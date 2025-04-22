@@ -4,10 +4,12 @@ import { CharStream, CommonTokenStream } from "antlr4ng";
 import { RustLikeLexer } from "./parser/grammar/RustLikeLexer";
 import { RustLikeParser } from "./parser/grammar/RustLikeParser";
 import { RustLikeCompilerVisitor } from "./RustLikeCompiler";
+import { RustLikeVirtualMachine } from "./RustLikeVirtualMachine";
 
 export class RustLikeEvaluator extends BasicEvaluator {
   private executionCount = 0;
   private visitor = new RustLikeCompilerVisitor();
+  private VM = new RustLikeVirtualMachine();
 
   constructor(conductor: IRunnerPlugin) {
     super(conductor);
@@ -25,14 +27,13 @@ export class RustLikeEvaluator extends BasicEvaluator {
       // Parse the input
       const tree = parser.prog();
 
-      // Evaluate the parsed tree
-      const result = this.visitor.visit(tree);
+      // TODO: Conduct type checks
 
-      // TODO: Conduct type checks here
+      // Compile
+      const visitorResult = this.visitor.visit(tree);
 
-      // TODO: Compile
-
-      // TODO: Run bytecode on a virtual machine
+      // Run bytecode on the virtual machine
+      const result = this.VM.runInstrs(this.visitor.instructions);
 
       // Send the result to the REPL
       this.conductor.sendOutput(`Result of expression: ${result}`);
