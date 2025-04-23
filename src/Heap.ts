@@ -11,6 +11,10 @@ export enum Tag {
   // key is keyLen bytes long
   ENVIRONMENT = 6, // Heap allocated 
   UNIT = 7,
+  ARRAY = 8, // Heap allocated
+  TUPLE = 9, // Heap allocated
+  RANGE = 10, // Primitive
+  REF = 11, // Reference to a value
 
   // TODO: Add tuples (only if there is time to do so and find out about how rust manages the memory of tuples)
   //TUPLE = 4, // Heap allocated 

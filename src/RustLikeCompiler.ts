@@ -18,10 +18,18 @@ import {
   Str_exprContext,
   Bool_exprContext,
   Expr_stmtContext,
+  Block_exprContext,
+  If_exprContext,
+  CallExprContext,
+  Array_literalContext,
+  Tuple_exprContext,
+  Range_exprContext,
+  IndexExprContext,
 } from "./parser/grammar/RustLikeParser";
 import { RustLikeVisitor } from "./parser/grammar/RustLikeVisitor";
 import { Heap, Item, Tag } from "./Heap";
 import { Bytecode, Inst } from "./RustLikeVirtualMachine";
+import { ScopedScannerVisitor } from "./RustLikeTypeChecker";
 
 /*  map supported infix operators to byte-code instruction  */
 // only include those the VM natively supports
@@ -87,7 +95,64 @@ export class RustLikeCompilerVisitor
   }
 
   /* functions are recognised but not compiled yet */
-  visitFn_decl(_: Fn_declContext): Item {
+  visitFn_decl(ctx: Fn_declContext): Item {
+    const fnName = ctx.IDENTIFIER().getText();
+    const block = ctx.block_expr() === null ? ctx.block_stmt() : ctx.block_expr();
+    
+    // Get parameter names and types
+    const paramNames: string[] = [];
+    const paramTypes: Item[] = [];
+    if (ctx.param_list_opt().param_list() !== null) {
+      ctx.param_list_opt().param_list().param().forEach((param) => {
+        paramNames.push(param.IDENTIFIER().getText());
+        paramTypes.push(new Item(Tag.UNIT, 0, 0)); // TODO: Parse actual types
+      });
+    }
+
+    // Scan the function body to get captured variables
+    const scanRes = new ScopedScannerVisitor(block).visit(block);
+    
+    // Create closure type
+    const closureType = new Item(Tag.CLOSURE, 0, {
+      captureNames: scanRes.names,
+      captureTypes: scanRes.types,
+      paramNames: paramNames,
+      paramTypes: paramTypes,
+      retType: new Item(Tag.UNIT, 0, 0), // TODO: Parse return type
+    });
+
+    // Declare the function
+    this.instructions.push(
+      new Inst(Bytecode.DECL, {
+        name: fnName,
+        rustLikeType: closureType,
+      })
+    );
+
+    // Store current instruction pointer for the function
+    const fnStart = this.instructions.length;
+    this.instructions.push(new Inst(Bytecode.LDCI, fnStart));
+
+    // Enter function scope
+    this.instructions.push(new Inst(Bytecode.ENTER_SCOPE, scanRes.names.length + paramNames.length));
+
+    // Bind parameters
+    paramNames.forEach((name) => {
+      this.instructions.push(
+        new Inst(Bytecode.DECL, {
+          name,
+          rustLikeType: new Item(Tag.UNIT, 0, 0), // TODO: Use actual param types
+        })
+      );
+    });
+
+    // Compile function body
+    this.visit(block);
+
+    // Exit function scope and return
+    this.instructions.push(new Inst(Bytecode.EXIT_SCOPE));
+    this.instructions.push(new Inst(Bytecode.RET));
+
     return this.defaultResult();
   }
 
@@ -141,7 +206,7 @@ export class RustLikeCompilerVisitor
     if (ctx.str_expr()) return this.visit(ctx.str_expr()!);
     if (ctx.bool_expr()) return this.visit(ctx.bool_expr()!);
 
-    /* treat “true / false” identifiers as literals         */
+    /* treat "true / false" identifiers as literals         */
     if (ctx.IDENTIFIER()) {
       const name = ctx.IDENTIFIER()!.getText();
       if (name === "true" || name === "false") {
@@ -311,6 +376,22 @@ export class RustLikeCompilerVisitor
   /*  catch-all infix expression that the grammar
       may generate for any other constructs       */
   visitExpr(ctx: ExprContext): Item {
+    if (ctx.getChildCount() === 2) {
+      // Handle unary operators including ref and deref
+      const op = ctx.getChild(0).getText();
+      const expr = ctx.getChild(1) as ExprContext;
+      
+      if (op === '&') {
+        this.visit(expr);
+        this.instructions.push(new Inst(Bytecode.REF));
+        return this.defaultResult();
+      } else if (op === '*') {
+        this.visit(expr);
+        this.instructions.push(new Inst(Bytecode.DEREF));
+        return this.defaultResult();
+      }
+    }
+    
     if (ctx.getChildCount() === 3) {
       const lhs = ctx.getChild(0) as ExprContext;
       const opTxt = ctx.getChild(1).getText();
@@ -326,6 +407,121 @@ export class RustLikeCompilerVisitor
       // all other binary ops handled above in visitBinaryOpExpr
     }
     return this.visitChildren(ctx);
+  }
+
+  visitBlock_expr(ctx: Block_exprContext): Item {
+    // Enter block scope
+    const scanRes = new ScopedScannerVisitor(ctx).visit(ctx);
+    this.instructions.push(new Inst(Bytecode.ENTER_SCOPE, scanRes.names.length));
+
+    // Visit statements
+    this.visit(ctx.stmt_list());
+
+    // Visit final expression
+    const result = this.visit(ctx.expr());
+
+    // Exit block scope
+    this.instructions.push(new Inst(Bytecode.EXIT_SCOPE));
+
+    return result;
+  }
+
+  visitIf_expr(ctx: If_exprContext): Item {
+    // Evaluate condition
+    this.visit(ctx.expr());
+    
+    // Jump if false to else branch
+    const jof = new Inst(Bytecode.JOF, 0);
+    this.instructions.push(jof);
+    
+    // Compile then branch
+    const thenResult = this.visit(ctx.block_expr()[0]);
+    
+    // Jump over else branch
+    const goto = new Inst(Bytecode.GOTO, 0);
+    this.instructions.push(goto);
+    
+    // Patch jump if false to else branch
+    jof.operand = this.instructions.length;
+    
+    // Compile else branch
+    const elseResult = this.visit(ctx.block_expr()[1]);
+    
+    // Patch jump over else branch
+    goto.operand = this.instructions.length;
+    
+    return thenResult; // Both branches should have same type
+  }
+
+  visitCallExpr(ctx: CallExprContext): Item {
+    // Evaluate receiver
+    this.visit(ctx.expr());
+    
+    // Evaluate arguments in order
+    if (ctx.arg_list_opt().expr() !== null) {
+      ctx.arg_list_opt().expr().forEach((arg) => {
+        this.visit(arg);
+      });
+    }
+    
+    // Call the function
+    this.instructions.push(new Inst(Bytecode.CALL));
+    
+    return this.defaultResult();
+  }
+
+  visitArray_literal(ctx: Array_literalContext): Item {
+    // Evaluate all elements
+    if (ctx.expr() !== null) {
+      ctx.expr().forEach((elem) => {
+        this.visit(elem);
+      });
+      // Create array from elements
+      this.instructions.push(new Inst(Bytecode.NEW_ARRAY, ctx.expr().length));
+    } else {
+      // Empty array
+      this.instructions.push(new Inst(Bytecode.NEW_ARRAY, 0));
+    }
+    return this.defaultResult();
+  }
+
+  visitTuple_expr(ctx: Tuple_exprContext): Item {
+    // Evaluate all elements
+    if (ctx.expr() !== null) {
+      ctx.expr().forEach((elem) => {
+        this.visit(elem);
+      });
+      // Create tuple from elements
+      this.instructions.push(new Inst(Bytecode.NEW_TUPLE, ctx.expr().length));
+    } else {
+      // Empty tuple
+      this.instructions.push(new Inst(Bytecode.NEW_TUPLE, 0));
+    }
+    return this.defaultResult();
+  }
+
+  visitRange_expr(ctx: Range_exprContext): Item {
+    // Evaluate start and end
+    this.visit(ctx.u32_expr(0));
+    this.visit(ctx.u32_expr(1));
+    
+    // Create range
+    this.instructions.push(new Inst(Bytecode.NEW_RANGE));
+    
+    return this.defaultResult();
+  }
+
+  visitIndexExpr(ctx: IndexExprContext): Item {
+    // Evaluate array/string
+    this.visit(ctx.expr(0));
+    
+    // Evaluate index
+    this.visit(ctx.expr(1));
+    
+    // Index into container
+    this.instructions.push(new Inst(Bytecode.INDEX));
+    
+    return this.defaultResult();
   }
 }
 

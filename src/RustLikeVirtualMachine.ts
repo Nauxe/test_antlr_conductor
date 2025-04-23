@@ -26,6 +26,12 @@ export enum Bytecode { // To be put on operand stack
   LDCC = 22, // Load constant closure
   RET = 23,
   DECL = 24, // Declare identifier 
+  NEW_ARRAY = 25, // Create new array from elements on stack
+  NEW_TUPLE = 26, // Create new tuple from elements on stack
+  NEW_RANGE = 27, // Create new range from start and end
+  INDEX = 28, // Index into array/string
+  REF = 29, // Create a reference to a value
+  DEREF = 30, // Dereference a reference
 }
 
 // Represents numbers of elements popped from OS to run the instruction 
@@ -55,6 +61,12 @@ export const BytecodeArity: Record<Bytecode, number> = {
   [Bytecode.LDCC]: 1,
   [Bytecode.RET]: 0,
   [Bytecode.DECL]: 0, // Operand: { name: string, type: RustLikeType }
+  [Bytecode.NEW_ARRAY]: 1, // Operand: number of elements
+  [Bytecode.NEW_TUPLE]: 1, // Operand: number of elements
+  [Bytecode.NEW_RANGE]: 0, // Takes start and end from stack
+  [Bytecode.INDEX]: 0, // Takes array/string and index from stack
+  [Bytecode.REF]: 0, // Takes value from stack, creates reference
+  [Bytecode.DEREF]: 0, // Takes reference from stack, gets value
 }
 
 export interface Frame {
@@ -428,6 +440,70 @@ export class RustLikeVirtualMachine {
           const curEnv = this.heap.get_data(this.E) as EnvironmentValue;
           curEnv.bindings.set(name, undefined);
         }
+      }
+      case Bytecode.NEW_ARRAY: {
+        const numElements = inst.operand as number;
+        const elements: Item[] = [];
+        for (let i = 0; i < numElements; i++) {
+          elements.unshift(this.OS.pop()!);
+        }
+        const array = new Item(Tag.ARRAY, 0, elements);
+        this.OS.push(array);
+        break;
+      }
+      case Bytecode.NEW_TUPLE: {
+        const numElements = inst.operand as number;
+        const elements: Item[] = [];
+        for (let i = 0; i < numElements; i++) {
+          elements.unshift(this.OS.pop()!);
+        }
+        const tuple = new Item(Tag.TUPLE, 0, elements);
+        this.OS.push(tuple);
+        break;
+      }
+      case Bytecode.NEW_RANGE: {
+        const end = this.OS.pop()!;
+        const start = this.OS.pop()!;
+        const range = new Item(Tag.RANGE, 0, { start: start.value, end: end.value });
+        this.OS.push(range);
+        break;
+      }
+      case Bytecode.INDEX: {
+        const index = this.OS.pop()!;
+        const container = this.OS.pop()!;
+        
+        if (container.tag === Tag.ARRAY || container.tag === Tag.TUPLE) {
+          const elements = container.value as Item[];
+          if (index.value < 0 || index.value >= elements.length) {
+            throw new Error(`Index ${index.value} out of bounds for ${container.tag}`);
+          }
+          this.OS.push(elements[index.value]);
+        } else if (container.tag === Tag.STRING) {
+          const str = container.value as string;
+          if (index.value < 0 || index.value >= str.length) {
+            throw new Error(`Index ${index.value} out of bounds for string`);
+          }
+          this.OS.push(new Item(Tag.STRING, 0, str[index.value]));
+        } else {
+          throw new Error(`Cannot index into ${container.tag}`);
+        }
+        break;
+      }
+      case Bytecode.REF: {
+        const value = this.OS.pop()!;
+        // Create a reference to the value
+        const ref = new Item(Tag.REF, 0, value);
+        this.OS.push(ref);
+        break;
+      }
+      case Bytecode.DEREF: {
+        const ref = this.OS.pop()!;
+        if (ref.tag !== Tag.REF) {
+          throw new Error("Cannot dereference non-reference value");
+        }
+        // Get the value being referenced
+        this.OS.push(ref.value);
+        break;
       }
     }
   }
