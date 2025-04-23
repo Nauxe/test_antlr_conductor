@@ -99,7 +99,15 @@ export class RustLikeCompilerVisitor
   }
 
   visitStmt_list(ctx: Stmt_listContext): Item {
-    ctx.stmt().forEach((s) => this.visit(s));
+    if (!ctx.stmt()) {
+      return this.defaultResult();
+    }
+    
+    // Visit each statement in the list
+    for (const stmt of ctx.stmt()) {
+      this.visit(stmt);
+    }
+    
     return this.defaultResult();
   }
 

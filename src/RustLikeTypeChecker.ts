@@ -226,7 +226,15 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   }
 
   visitStmt_list(ctx: Stmt_listContext): RustLikeType {
-    ctx.stmt().forEach((s) => this.visit(s));
+    if (!ctx.stmt()) {
+      return UNIT_TYPE;
+    }
+    
+    // Visit each statement in the list
+    for (const stmt of ctx.stmt()) {
+      this.visit(stmt);
+    }
+    
     return UNIT_TYPE;
   }
 
