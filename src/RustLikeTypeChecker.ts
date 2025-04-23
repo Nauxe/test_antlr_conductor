@@ -206,14 +206,29 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   }
 
   visitProg(ctx: ProgContext): RustLikeType {
-    if (ctx.block_stmt() !== null) {
-      const resType: RustLikeType = this.visit(ctx.block_stmt());
-      if (!typeEqual(resType, UNIT_TYPE))
-        throw new Error("Program returned non-unit type");
-      return UNIT_TYPE;
-    } else {
-      const resType: RustLikeType = this.visit(ctx.block_expr());
-      return resType;
+    try {
+      // Create a new scope for the program
+      const scanRes: ScanResult = new ScopedScannerVisitor(ctx).visit(ctx);
+      this.typeEnv = this.typeEnv.extend(scanRes);
+
+      let result: RustLikeType;
+      if (ctx.block_stmt() !== null) {
+        result = this.visit(ctx.block_stmt());
+        if (!typeEqual(result, UNIT_TYPE)) {
+          throw new Error("Program with block statement must return unit type");
+        }
+      } else if (ctx.block_expr() !== null) {
+        result = this.visit(ctx.block_expr());
+      } else {
+        throw new Error("Program must have either a block statement or block expression");
+      }
+
+      // Exit program scope
+      this.typeEnv = this.typeEnv.parent;
+      return result;
+    } catch (error) {
+      console.error("Error in program:", error);
+      throw error;
     }
   }
 
@@ -244,12 +259,34 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   }
 
   visitBlock_expr(ctx: Block_exprContext): RustLikeType {
-    const scanRes: ScanResult = new ScopedScannerVisitor(ctx).visit(ctx);
-    this.typeEnv = this.typeEnv.extend(scanRes);
-    this.visit(ctx.stmt_list()); // Visit all statements
-    const exprType = this.visit(ctx.expr()); // visit the final expression
-    this.typeEnv = this.typeEnv.parent;
-    return exprType;
+    try {
+      // Create a new scope for the block
+      const scanRes: ScanResult = new ScopedScannerVisitor(ctx).visit(ctx);
+      this.typeEnv = this.typeEnv.extend(scanRes);
+
+      // Visit all statements in the block
+      if (ctx.stmt_list() && ctx.stmt_list().stmt()) {
+        const stmts = ctx.stmt_list().stmt();
+        for (let i = 0; i < stmts.length; i++) {
+          this.visit(stmts[i]);
+        }
+      }
+
+      // Visit the final expression if it exists
+      let result: RustLikeType;
+      if (ctx.expr()) {
+        result = this.visit(ctx.expr());
+      } else {
+        result = UNIT_TYPE;
+      }
+
+      // Exit block scope
+      this.typeEnv = this.typeEnv.parent;
+      return result;
+    } catch (error) {
+      console.error("Error in block expression:", error);
+      throw error;
+    }
   }
 
   visitBool_expr(ctx: Bool_exprContext): RustLikeType {
@@ -368,31 +405,33 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   }
 
   visitCallExpr(ctx: CallExprContext): RustLikeType {
-    const fnName: string = ctx.expr().getText();
-    const idType: RustLikeType = this.typeEnv.lookUpType(fnName);
-    if (idType.tag !== Tag.CLOSURE) {
-      throw new Error(`Expected function type for ${fnName}, found ${typeToString(idType)}.`);
-    }
-
-    const fnType: FnType = idType as FnType;
-    const argTypes =
-      ctx.arg_list_opt() === null
-        ? []
-        : ctx.arg_list_opt().expr().map(
-          (arg: ExprContext) => this.visit(arg)
-        );
-
-    if (argTypes.length !== fnType.paramTypes.length) {
-      throw new Error(`Function ${fnName} takes ${fnType.paramTypes.length} arguments but ${argTypes.length} were supplied.`);
-    }
-
-    for (let i = 0; i < argTypes.length; i++) {
-      if (!typeEqual(argTypes[i], fnType.paramTypes[i])) {
-        throw new Error(`Mismatched types in function call to ${fnName}, expected ${typeToString(fnType.paramTypes[i])} at index ${i}, found ${typeToString(argTypes[i])}.`);
+    try {
+      // Visit the function expression to get its type
+      const fnType = this.visit(ctx.expr());
+      if (fnType.tag !== Tag.CLOSURE) {
+        throw new Error(`Expected function type, found ${typeToString(fnType)}.`);
       }
-    }
 
-    return fnType.retType;
+      const fnClosure = fnType as FnType;
+      const argTypes = ctx.arg_list_opt() === null
+        ? []
+        : ctx.arg_list_opt().expr().map(arg => this.visit(arg));
+
+      if (argTypes.length !== fnClosure.paramTypes.length) {
+        throw new Error(`Function takes ${fnClosure.paramTypes.length} arguments but ${argTypes.length} were supplied.`);
+      }
+
+      for (let i = 0; i < argTypes.length; i++) {
+        if (!typeEqual(argTypes[i], fnClosure.paramTypes[i])) {
+          throw new Error(`Mismatched types in function call, expected ${typeToString(fnClosure.paramTypes[i])} at index ${i}, found ${typeToString(argTypes[i])}.`);
+        }
+      }
+
+      return fnClosure.retType;
+    } catch (error) {
+      console.error("Error in function call:", error);
+      throw error;
+    }
   }
 
   visitTerminal(_node: TerminalNode): RustLikeType {
