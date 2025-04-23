@@ -71,8 +71,8 @@ export class RustLikeEvaluator extends BasicEvaluator {
 
     if (this.isDebug) {
       const instructionList = this.compilerVisitor.instructions.map(
-        (inst, index) => `\n[${index}: ${Bytecode[inst.opcode].padEnd(7)} ${inst.operand ?? ""}]`
-      );
+        (inst, index) => `\n[${index}: ${Bytecode[inst.opcode].padEnd(7)} ${inst.operand !== undefined ? JSON.stringify(inst.operand) : ""}]`
+      ).join('');
       this.conductor.sendOutput(`Compiled instructions: ${instructionList}\n\n -------------------------- \n`);
     }
 

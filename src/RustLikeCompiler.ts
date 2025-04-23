@@ -65,33 +65,23 @@ export class RustLikeCompilerVisitor
     const scanResult = scanner.visit(ctx);
 
     // Process all declarations first
-    if (ctx.block_expr()) {
-      const blockExpr = ctx.block_expr();
-      if (blockExpr.stmt_list() && blockExpr.stmt_list().stmt()) {
-        const stmts = blockExpr.stmt_list().stmt();
-        for (let i = 0; i < stmts.length; i++) {
-          if (stmts[i] && (stmts[i].fn_decl() || stmts[i].decl())) {
-            this.visit(stmts[i]);
-          }
-        }
-      }
-    } else if (ctx.block_stmt()) {
-      const blockStmt = ctx.block_stmt();
-      if (blockStmt.stmt_list() && blockStmt.stmt_list().stmt()) {
-        const stmts = blockStmt.stmt_list().stmt();
-        for (let i = 0; i < stmts.length; i++) {
-          if (stmts[i] && (stmts[i].fn_decl() || stmts[i].decl())) {
-            this.visit(stmts[i]);
-          }
+    if (ctx.stmt_list()) {
+      const stmts = ctx.stmt_list().stmt();
+      for (let i = 0; i < stmts.length; i++) {
+        if (stmts[i] && (stmts[i].fn_decl() || stmts[i].decl())) {
+          this.visit(stmts[i]);
         }
       }
     }
 
     // Then process all statements
-    if (ctx.block_expr()) {
-      this.visit(ctx.block_expr());
-    } else if (ctx.block_stmt()) {
-      this.visit(ctx.block_stmt());
+    if (ctx.stmt_list()) {
+      const stmts = ctx.stmt_list().stmt();
+      for (let i = 0; i < stmts.length; i++) {
+        if (stmts[i] && !(stmts[i].fn_decl() || stmts[i].decl())) {
+          this.visit(stmts[i]);
+        }
+      }
     }
 
     // Add DONE instruction
@@ -289,12 +279,13 @@ export class RustLikeCompilerVisitor
 
   /* expression used *as* a statement */
   visitExpr_stmt(ctx: Expr_stmtContext): Item {
-    // Visit the expression - this leaves its result on the stack
-    this.visit(ctx.expr());
+    // Visit the expression first
+    const result = this.visit(ctx.expr());
     
-    // We intentionally do NOT pop the result off the stack
-    // This ensures the result is available for the final program output
-    return this.defaultResult();
+    // DO NOT add POP instruction - we want to keep the result on the stack
+    // for the final output
+    
+    return result;
   }
 
   /* ─────────── Expressions ─────────── */
