@@ -64,34 +64,15 @@ export class RustLikeCompilerVisitor
     const scanner = new ScopedScannerVisitor(ctx);
     const scanResult = scanner.visit(ctx);
 
-    // Process all declarations first
     if (ctx.block_expr()) {
-      const blockExpr = ctx.block_expr();
-      if (blockExpr.stmt_list() && blockExpr.stmt_list().stmt()) {
-        const stmts = blockExpr.stmt_list().stmt();
-        for (let i = 0; i < stmts.length; i++) {
-          if (stmts[i] && (stmts[i].fn_decl() || stmts[i].decl())) {
-            this.visit(stmts[i]);
-          }
-        }
-      }
-    } else if (ctx.block_stmt()) {
-      const blockStmt = ctx.block_stmt();
-      if (blockStmt.stmt_list() && blockStmt.stmt_list().stmt()) {
-        const stmts = blockStmt.stmt_list().stmt();
-        for (let i = 0; i < stmts.length; i++) {
-          if (stmts[i] && (stmts[i].fn_decl() || stmts[i].decl())) {
-            this.visit(stmts[i]);
-          }
-        }
-      }
-    }
-
-    // Then process all statements
-    if (ctx.block_expr()) {
+      // If program is a block expression (which might contain statements)
       this.visit(ctx.block_expr());
     } else if (ctx.block_stmt()) {
+      // If program is a block statement
       this.visit(ctx.block_stmt());
+    } else {
+      // This should never happen according to the grammar, but handle just in case
+      throw new Error("Program must contain either a block expression or a block statement");
     }
 
     // Add DONE instruction
