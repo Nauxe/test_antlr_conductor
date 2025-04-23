@@ -1,19 +1,27 @@
-import { AbstractParseTreeVisitor } from "antlr4ng";
-import { Tag } from "./Heap";
+import { AbstractParseTreeVisitor, ParserRuleContext, } from "antlr4ng";
+import { EnvironmentValue, Tag } from "./Heap";
+import { RustLikeVisitor } from "./parser/grammar/RustLikeVisitor";
+import { Frame } from "./RustLikeVirtualMachine";
+import { Block_exprContext, Block_stmtContext, DeclContext, Fn_declContext, If_exprContext, If_stmtContext, ProgContext, TypeContext, While_loopContext } from "./parser/grammar/RustLikeParser";
 
 type UnitType = { tag: Tag.UNIT };
 type U32Type = { tag: Tag.NUMBER; val: number }; // Value stored for compile time checks 
-type BoolType = { tag: Tag.BOOLEAN };
+type BoolType = { tag: Tag.BOOLEAN; val: boolean };
 type StringType = { tag: Tag.STRING };
 type FnType = {
   tag: Tag.CLOSURE;
   captureNames: string[];
-  paramNames: string[];
   captureTypes: RustLikeType[];
+  paramNames: string[];
   paramTypes: RustLikeType[];
   retType: RustLikeType;
 };
 export type RustLikeType = UnitType | U32Type | BoolType | StringType | FnType;
+
+const UNIT_TYPE: UnitType = { tag: Tag.UNIT };
+const U32_TYPE: U32Type = { tag: Tag.NUMBER, val: 0 }; // value initialized to be 0
+const BOOL_TYPE: BoolType = { tag: Tag.BOOLEAN, val: false }; // value initalized to false
+const STRING_TYPE: StringType = { tag: Tag.STRING };
 
 export function typeEqual(a: RustLikeType, b: RustLikeType): boolean {
   return a === b
@@ -26,9 +34,129 @@ export function typeEqual(a: RustLikeType, b: RustLikeType): boolean {
           ? false
           : a.paramTypes.every((rtype, idx) => typeEqual(rtype, b.paramTypes[idx])) &&
           a.captureTypes.every((rtype, idx) => typeEqual(rtype, b.captureTypes[idx]))
-        : true; // Should not reach here, but if it does it is a primitive type where a.tag === b.tag
+        : true; // Should not reach here, but if it does it is a type where a.tag === b.tag
 }
 
-export class RustTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLikeType> {
+type ScanResult = { names: string[]; types: RustLikeType[] };
 
+export class ScopedScannerVisitor extends AbstractParseTreeVisitor<ScanResult> implements RustLikeVisitor<ScanResult> {
+  scanContext: ParserRuleContext;
+  constructor(ctx: ParserRuleContext) {
+    super();
+    this.scanContext = ctx;
+  }
+
+  private parseType(ctx: TypeContext): RustLikeType {
+    if (ctx.getText() === '()') {
+      return UNIT_TYPE;
+    } else if (ctx.getText() === 'u32') {
+      return U32_TYPE;
+    } else if (ctx.getText() === 'bool') {
+      return BOOL_TYPE;
+    } else if (ctx.getText() === 'string') {
+      return STRING_TYPE;
+    } else { // Can only be a function type here
+      return {
+        tag: Tag.CLOSURE,
+        captureNames: [], // Dummy value 
+        captureTypes: [], // Dummy value 
+        paramNames: [], // Dummy value 
+        paramTypes: ctx.type_list_opt().type_().map(t => this.parseType(t)),
+        retType: this.parseType(ctx.type()),
+      }
+    }
+  }
+
+  protected defaultResult(): ScanResult {
+    return { names: [], types: [] }; // Return empty scan results
+  }
+
+  protected aggregateResult(aggregate: ScanResult, nextResult: ScanResult): ScanResult {
+    return {
+      names: aggregate.names.concat(nextResult.names),
+      types: aggregate.types.concat(nextResult.types)
+    };
+  }
+
+  visitFn_decl(ctx: Fn_declContext): ScanResult {
+    const fnName = ctx.IDENTIFIER().getText();
+    const fnRetType = this.parseType(ctx.type());
+    let paramNames = [];
+    let paramTypes = [];
+    if (ctx.param_list_opt().param_list() !== null) {
+      ctx.param_list_opt().param_list().param().forEach((param) => {
+        paramNames.push(param.IDENTIFIER().getText());
+        paramTypes.push(this.parseType(param.type()));
+      });
+    }
+
+    return {
+      names: [fnName],
+      types: [{
+        tag: Tag.CLOSURE,
+        captureNames: [], // To be initialized in other visitors 
+        captureTypes: [], // To be initalized in other visitors
+        paramNames: paramNames,
+        paramTypes: paramTypes,
+        retType: fnRetType,
+      }
+      ]
+    };
+  }
+
+  visitBlock_stmt(ctx: Block_stmtContext): ScanResult {
+    if (ctx !== this.scanContext)
+      return this.defaultResult(); // Stop scanning, no longer in scope
+    return this.visitChildren(ctx);
+  }
+
+
+  visitBlock_expr(ctx: Block_exprContext): ScanResult {
+    if (ctx !== this.scanContext)
+      return this.defaultResult(); // Stop scanning, no longer in scope
+    return this.visitChildren(ctx);
+  }
+
+  visitIf_stmt(ctx: If_stmtContext): ScanResult {
+    if (ctx !== this.scanContext)
+      return this.defaultResult(); // Stop scanning, no longer in scope
+    return this.visitChildren(ctx);
+  }
+
+  visitIf_expr(ctx: If_exprContext): ScanResult {
+    if (ctx !== this.scanContext)
+      return this.defaultResult(); // Stop scanning, no longer in scope
+    return this.visitChildren(ctx);
+  }
+
+  visitWhile_loop(ctx: While_loopContext): ScanResult {
+    if (ctx !== this.scanContext)
+      return this.defaultResult(); // Stop scanning, no longer in scope
+    return this.visitChildren(ctx);
+  }
+
+  visitDecl(ctx: DeclContext): ScanResult {
+    const name = ctx.IDENTIFIER().getText();
+    const type = this.parseType(ctx.type());
+    return {
+      names: [name],
+      types: [type]
+    };
+  }
 }
+
+export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLikeType> implements RustLikeVisitor<RustLikeType> {
+  typeEnv: EnvironmentValue; // Has a parent address (unused in type checker) and a map for bindings
+  compileStack: Frame[]; // Has a program counter address (unused), old environment (unused), and a map for closure bindings   
+
+  constructor() {
+    super();
+  }
+
+  visitProg(ctx: ProgContext): RustLikeType {
+    return UNIT_TYPE; // temporary
+  }
+}
+
+
+
