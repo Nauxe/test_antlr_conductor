@@ -2,7 +2,7 @@ import { AbstractParseTreeVisitor, ParserRuleContext, } from "antlr4ng";
 import { EnvironmentValue, Tag } from "./Heap";
 import { RustLikeVisitor } from "./parser/grammar/RustLikeVisitor";
 import { Frame } from "./RustLikeVirtualMachine";
-import { Block_exprContext, Block_stmtContext, DeclContext, Fn_declContext, If_exprContext, If_stmtContext, ProgContext, TypeContext, While_loopContext } from "./parser/grammar/RustLikeParser";
+import { BinaryOpExprContext, Block_exprContext, Block_stmtContext, Bool_exprContext, CallExprContext, DeclContext, Fn_declContext, If_exprContext, If_stmtContext, IndexExprContext, ProgContext, Str_exprContext, TypeContext, U32_exprContext, UnaryExprContext, While_loopContext } from "./parser/grammar/RustLikeParser";
 
 type UnitType = { tag: Tag.UNIT };
 type U32Type = { tag: Tag.NUMBER; val: number }; // Value stored for compile time checks 
@@ -39,6 +39,7 @@ export function typeEqual(a: RustLikeType, b: RustLikeType): boolean {
 
 export type ScanResult = { names: string[]; types: RustLikeType[] };
 
+// A new ScopedScannerVisitor needs to be created for every scope to scan its declareds
 export class ScopedScannerVisitor extends AbstractParseTreeVisitor<ScanResult> implements RustLikeVisitor<ScanResult> {
   scanContext: ParserRuleContext;
   constructor(ctx: ParserRuleContext) {
@@ -156,6 +157,51 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   visitProg(ctx: ProgContext): RustLikeType {
     return UNIT_TYPE; // temporary
   }
+
+  visitIf_expr(ctx: If_exprContext): RustLikeType {
+    return UNIT_TYPE; // temporary
+  }
+
+  visitBlock_expr(ctx: Block_exprContext): RustLikeType {
+    return UNIT_TYPE; // temporary
+  }
+
+  visitBool_expr(ctx: Bool_exprContext): RustLikeType {
+    return UNIT_TYPE; // temporary
+  }
+
+  visitU32_expr(ctx: U32_exprContext): RustLikeType {
+    return UNIT_TYPE; // temporary
+  }
+
+  visitStr_expr(ctx: Str_exprContext): RustLikeType {
+    return UNIT_TYPE; // temporary
+  }
+
+  visitIndexExpr(ctx: IndexExprContext): RustLikeType {
+    return UNIT_TYPE; // temporary
+  }
+
+  visitUnaryExpr(ctx: UnaryExprContext): RustLikeType {
+    return UNIT_TYPE; // temporary
+  }
+
+  visitBinaryOpExpr(ctx: BinaryOpExprContext): RustLikeType {
+    return UNIT_TYPE; //temporary
+  }
+
+  visitCallExpr(ctx: CallExprContext): RustLikeType {
+    return UNIT_TYPE; // temporary
+  }
+
+  visitDecl(ctx: DeclContext): RustLikeType {
+    return UNIT_TYPE; // Temp
+  }
+
+  visitFn_decl(ctx: Fn_declContext): RustLikeType {
+    return UNIT_TYPE; // temporary
+  }
+
 }
 
 
