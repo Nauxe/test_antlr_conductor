@@ -43,6 +43,11 @@ export class RustLikeEvaluator extends BasicEvaluator {
       
       this.conductor.sendOutput(`Parsed successfully.`);
       
+      // Debug output for the AST
+      if (this.isDebug) {
+        this.conductor.sendOutput(`AST: ${tree.toStringTree(parser)}`);
+      }
+      
     } catch (error) {
       // Handle errors and send them to the REPL
       this.conductor.sendOutput(`Parse error: ${error instanceof Error ? error.message : String(error)}`);
@@ -57,6 +62,7 @@ export class RustLikeEvaluator extends BasicEvaluator {
     } catch (error) {
       // Handle errors and send them to the REPL
       this.conductor.sendOutput(`Type checker error: ${error instanceof Error ? error.message : String(error)}`);
+      return;
     }
 
     // Compile
@@ -67,6 +73,7 @@ export class RustLikeEvaluator extends BasicEvaluator {
     } catch (error) {
       // Handle errors and send them to the REPL
       this.conductor.sendOutput(`Compile error: ${error instanceof Error ? error.message : String(error)}`);
+      return;
     }
 
     if (this.isDebug) {
