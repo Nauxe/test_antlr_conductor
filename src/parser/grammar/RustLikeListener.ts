@@ -17,7 +17,8 @@ import { Continue_stmtContext } from "./RustLikeParser.js";
 import { Expr_stmtContext } from "./RustLikeParser.js";
 import { If_stmtContext } from "./RustLikeParser.js";
 import { While_loopContext } from "./RustLikeParser.js";
-import { BlockContext } from "./RustLikeParser.js";
+import { Block_stmtContext } from "./RustLikeParser.js";
+import { Block_exprContext } from "./RustLikeParser.js";
 import { IndexExprContext } from "./RustLikeParser.js";
 import { UnaryExprContext } from "./RustLikeParser.js";
 import { PrimaryExprContext } from "./RustLikeParser.js";
@@ -183,15 +184,25 @@ export class RustLikeListener implements ParseTreeListener {
      */
     exitWhile_loop?: (ctx: While_loopContext) => void;
     /**
-     * Enter a parse tree produced by `RustLikeParser.block`.
+     * Enter a parse tree produced by `RustLikeParser.block_stmt`.
      * @param ctx the parse tree
      */
-    enterBlock?: (ctx: BlockContext) => void;
+    enterBlock_stmt?: (ctx: Block_stmtContext) => void;
     /**
-     * Exit a parse tree produced by `RustLikeParser.block`.
+     * Exit a parse tree produced by `RustLikeParser.block_stmt`.
      * @param ctx the parse tree
      */
-    exitBlock?: (ctx: BlockContext) => void;
+    exitBlock_stmt?: (ctx: Block_stmtContext) => void;
+    /**
+     * Enter a parse tree produced by `RustLikeParser.block_expr`.
+     * @param ctx the parse tree
+     */
+    enterBlock_expr?: (ctx: Block_exprContext) => void;
+    /**
+     * Exit a parse tree produced by `RustLikeParser.block_expr`.
+     * @param ctx the parse tree
+     */
+    exitBlock_expr?: (ctx: Block_exprContext) => void;
     /**
      * Enter a parse tree produced by the `indexExpr`
      * labeled alternative in `RustLikeParser.expr`.

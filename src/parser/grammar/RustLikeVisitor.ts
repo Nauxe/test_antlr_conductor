@@ -17,7 +17,8 @@ import { Continue_stmtContext } from "./RustLikeParser.js";
 import { Expr_stmtContext } from "./RustLikeParser.js";
 import { If_stmtContext } from "./RustLikeParser.js";
 import { While_loopContext } from "./RustLikeParser.js";
-import { BlockContext } from "./RustLikeParser.js";
+import { Block_stmtContext } from "./RustLikeParser.js";
+import { Block_exprContext } from "./RustLikeParser.js";
 import { IndexExprContext } from "./RustLikeParser.js";
 import { UnaryExprContext } from "./RustLikeParser.js";
 import { PrimaryExprContext } from "./RustLikeParser.js";
@@ -130,11 +131,17 @@ export class RustLikeVisitor<Result> extends AbstractParseTreeVisitor<Result> {
      */
     visitWhile_loop?: (ctx: While_loopContext) => Result;
     /**
-     * Visit a parse tree produced by `RustLikeParser.block`.
+     * Visit a parse tree produced by `RustLikeParser.block_stmt`.
      * @param ctx the parse tree
      * @return the visitor result
      */
-    visitBlock?: (ctx: BlockContext) => Result;
+    visitBlock_stmt?: (ctx: Block_stmtContext) => Result;
+    /**
+     * Visit a parse tree produced by `RustLikeParser.block_expr`.
+     * @param ctx the parse tree
+     * @return the visitor result
+     */
+    visitBlock_expr?: (ctx: Block_exprContext) => Result;
     /**
      * Visit a parse tree produced by the `indexExpr`
      * labeled alternative in `RustLikeParser.expr`.

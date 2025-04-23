@@ -19,7 +19,7 @@ stmt
     | break_stmt               // break;
     | continue_stmt            // continue;
     | expr_stmt                // any expr as statement
-    | block                    // nested block
+    | block_stmt               // nested block
     ;
 
 // ─── Declarations ────────────────────────────────────────────────────────────
@@ -29,7 +29,7 @@ decl
 
 // ─── Functions ───────────────────────────────────────────────────────────────
 fn_decl
-    : 'fn' IDENTIFIER '(' param_list_opt ')' '->' type block
+    : 'fn' IDENTIFIER '(' param_list_opt ')' '->' type (block_stmt | block_expr)
     ;
 
 param_list_opt 
@@ -50,16 +50,20 @@ continue_stmt   : 'continue' ';' ;
 expr_stmt       : expr ';' ;
 
 // ─── Control flow ────────────────────────────────────────────────────────────
-if_stmt     : 'if' expr block ('else' block)? ;
-while_loop  : 'while' expr block ;
+if_stmt     : 'if' expr block_stmt ('else' block_stmt)? ;
+while_loop  : 'while' expr block_stmt ; // While loops are not value producint
 
 // ─── Blocks ─────────────────────────────────────────────────────────────────
-block
+block_stmt
     : '{' stmt_list '}'
     ;
 
+block_expr
+  : '{' stmt_list expr '}'
+  ;
+
 // ─── Expressions ─────────────────────────────────────────────────────────────
-// Now a single left‑recursive expr rule, handling:
+// A single left‑recursive expr rule, handling:
 //   - unary ops
 //   - suffix indexing:  e[ idx ]
 //   - suffix calls:     f( args )
@@ -85,6 +89,7 @@ primary
     | array_literal
     | tuple_expr
     | range_expr
+    | block_expr
     ;
 
 arg_list_opt
@@ -93,7 +98,7 @@ arg_list_opt
     ;
 
 if_expr
-    : 'if' expr block ('else' block)?
+    : 'if' expr block_expr ('else' block_expr)?
     ;
 
 array_literal
