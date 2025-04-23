@@ -62,24 +62,36 @@ export class RustLikeCompilerVisitor
   visitProg(ctx: ProgContext): Item {
     // First scan all declarations to build the type environment
     const scanner = new ScopedScannerVisitor(ctx);
-    scanner.visit(ctx);
+    const scanResult = scanner.visit(ctx);
 
-    // The first child of ProgContext is the stmt_list
-    const stmtListCtx = ctx.getChild(0) as Stmt_listContext;
-    const stmts = stmtListCtx?.stmt() ?? [];
-
-    // First pass: handle declarations (functions and let-decls)
-    for (const stmt of stmts) {
-      if (stmt.fn_decl() || stmt.decl()) {
-        this.visit(stmt);
+    // Process all declarations first
+    if (ctx.block_expr()) {
+      const blockExpr = ctx.block_expr();
+      if (blockExpr.stmt_list() && blockExpr.stmt_list().stmt()) {
+        const stmts = blockExpr.stmt_list().stmt();
+        for (let i = 0; i < stmts.length; i++) {
+          if (stmts[i] && (stmts[i].fn_decl() || stmts[i].decl())) {
+            this.visit(stmts[i]);
+          }
+        }
+      }
+    } else if (ctx.block_stmt()) {
+      const blockStmt = ctx.block_stmt();
+      if (blockStmt.stmt_list() && blockStmt.stmt_list().stmt()) {
+        const stmts = blockStmt.stmt_list().stmt();
+        for (let i = 0; i < stmts.length; i++) {
+          if (stmts[i] && (stmts[i].fn_decl() || stmts[i].decl())) {
+            this.visit(stmts[i]);
+          }
+        }
       }
     }
 
-    // Second pass: compile the remaining statements (expressions, prints, etc.)
-    for (const stmt of stmts) {
-      if (!stmt.fn_decl() && !stmt.decl()) {
-        this.visit(stmt);
-      }
+    // Then process all statements
+    if (ctx.block_expr()) {
+      this.visit(ctx.block_expr());
+    } else if (ctx.block_stmt()) {
+      this.visit(ctx.block_stmt());
     }
 
     // Add DONE instruction
@@ -165,7 +177,7 @@ export class RustLikeCompilerVisitor
       // Scan the function body to get captured variables
       const scanRes = blockExpr 
         ? new ScopedScannerVisitor(blockExpr).visit(blockExpr)
-        : new ScopedScannerVisitor(blockStmt!).visit(blockStmt!);
+        : new ScopedScannerVisitor(blockStmt).visit(blockStmt);
 
       // Create closure type
       const closureType = new Item(Tag.CLOSURE, 0, {
@@ -205,8 +217,8 @@ export class RustLikeCompilerVisitor
       // Compile function body
       if (blockExpr) {
         // For block_expr, compile statements and final expression
-        if (blockExpr.stmt_list() && blockExpr.stmt_list()!.stmt()) {
-          const stmts = blockExpr.stmt_list()!.stmt();
+        if (blockExpr.stmt_list() && blockExpr.stmt_list().stmt()) {
+          const stmts = blockExpr.stmt_list().stmt();
           for (let i = 0; i < stmts.length; i++) {
             if (stmts[i]) this.visit(stmts[i]);
           }
@@ -214,15 +226,15 @@ export class RustLikeCompilerVisitor
 
         // Compile the expression at the end of the block
         if (blockExpr.expr()) {
-          this.visit(blockExpr.expr()!);
+          this.visit(blockExpr.expr());
         } else {
           // If no expression, add a unit value
           this.instructions.push(new Inst(Bytecode.LDCI, 0)); // UNIT value
         }
-      } else {
+      } else if (blockStmt) {
         // For block_stmt, compile statements and add unit return value
-        if (ctx.block_stmt() && ctx.block_stmt()!.stmt_list() && ctx.block_stmt()!.stmt_list()!.stmt()) {
-          const stmts = ctx.block_stmt()!.stmt_list()!.stmt();
+        if (blockStmt.stmt_list() && blockStmt.stmt_list().stmt()) {
+          const stmts = blockStmt.stmt_list().stmt();
           for (let i = 0; i < stmts.length; i++) {
             if (stmts[i]) this.visit(stmts[i]);
           }
@@ -264,8 +276,8 @@ export class RustLikeCompilerVisitor
 
   visitBlock_stmt(ctx: Block_stmtContext): Item {
     // Visit all statements in the block
-    if (ctx.stmt_list() && ctx.stmt_list()!.stmt()) {
-      const stmts = ctx.stmt_list()!.stmt();
+    if (ctx.stmt_list() && ctx.stmt_list().stmt()) {
+      const stmts = ctx.stmt_list().stmt();
       for (let i = 0; i < stmts.length; i++) {
         if (stmts[i]) this.visit(stmts[i]);
       }
@@ -310,6 +322,7 @@ export class RustLikeCompilerVisitor
     return this.visitChildren(ctx);
   }
 
+  /* ───── literals ───── */
   visitU32_expr(ctx: U32_exprContext): Item {
     this.instructions.push(
       new Inst(Bytecode.LDCI, parseInt(ctx.U32().getText(), 10))
