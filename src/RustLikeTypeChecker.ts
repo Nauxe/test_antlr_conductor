@@ -435,34 +435,41 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   }
 
   visitTerminal(_node: TerminalNode): RustLikeType {
-    switch (_node.getSymbol().type) {
-      case RustLikeParser.IDENTIFIER: {
-        const retType = this.typeEnv.lookUpType(_node.getText()); // This may be a lookup of an already moved value!
-        if (retType === MOVED_STRING_TYPE) throw new Error(`Borrow of moved String ${_node.getText()}.`);
-        return retType;
+    try {
+      switch (_node.getSymbol().type) {
+        case RustLikeParser.IDENTIFIER: {
+          const name = _node.getText();
+          const retType = this.typeEnv.lookUpType(name);
+          if (retType === MOVED_STRING_TYPE) {
+            throw new Error(`Borrow of moved String ${name}.`);
+          }
+          return retType;
+        }
+        case RustLikeParser.U32: {
+          return {
+            tag: Tag.NUMBER,
+            val: parseInt(_node.getText())
+          };
+        }
+        case RustLikeParser.BOOL: {
+          return {
+            tag: Tag.BOOLEAN,
+            val: _node.getText() === "true"
+          };
+        }
+        case RustLikeParser.STRING: {
+          return {
+            tag: Tag.STRING,
+            isMoved: false
+          };
+        }
+        default: {
+          return UNIT_TYPE;
+        }
       }
-      case RustLikeParser.U32: {
-        return {
-          tag: Tag.NUMBER,
-          val: parseInt(_node.getText())
-        };
-      }
-      case RustLikeParser.BOOL: {
-        return {
-          tag: Tag.BOOLEAN,
-          val: _node.getText() === "true"
-        };
-      }
-      case RustLikeParser.STRING: {
-        return {
-          tag: Tag.STRING,
-          isMoved: false
-        };
-      }
-      default: {
-        //TODO: Future implementation can add types for + and -
-        return UNIT_TYPE;
-      }
+    } catch (error) {
+      console.error("Error in terminal:", error);
+      throw error;
     }
   }
 
