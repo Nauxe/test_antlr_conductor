@@ -22,6 +22,8 @@ import { Block_exprContext } from "./RustLikeParser.js";
 import { IndexExprContext } from "./RustLikeParser.js";
 import { UnaryExprContext } from "./RustLikeParser.js";
 import { PrimaryExprContext } from "./RustLikeParser.js";
+import { RefExprContext } from "./RustLikeParser.js";
+import { DerefExprContext } from "./RustLikeParser.js";
 import { LogicalExprContext } from "./RustLikeParser.js";
 import { BinaryOpExprContext } from "./RustLikeParser.js";
 import { CallExprContext } from "./RustLikeParser.js";
@@ -239,6 +241,30 @@ export class RustLikeListener implements ParseTreeListener {
      * @param ctx the parse tree
      */
     exitPrimaryExpr?: (ctx: PrimaryExprContext) => void;
+    /**
+     * Enter a parse tree produced by the `refExpr`
+     * labeled alternative in `RustLikeParser.expr`.
+     * @param ctx the parse tree
+     */
+    enterRefExpr?: (ctx: RefExprContext) => void;
+    /**
+     * Exit a parse tree produced by the `refExpr`
+     * labeled alternative in `RustLikeParser.expr`.
+     * @param ctx the parse tree
+     */
+    exitRefExpr?: (ctx: RefExprContext) => void;
+    /**
+     * Enter a parse tree produced by the `derefExpr`
+     * labeled alternative in `RustLikeParser.expr`.
+     * @param ctx the parse tree
+     */
+    enterDerefExpr?: (ctx: DerefExprContext) => void;
+    /**
+     * Exit a parse tree produced by the `derefExpr`
+     * labeled alternative in `RustLikeParser.expr`.
+     * @param ctx the parse tree
+     */
+    exitDerefExpr?: (ctx: DerefExprContext) => void;
     /**
      * Enter a parse tree produced by the `logicalExpr`
      * labeled alternative in `RustLikeParser.expr`.

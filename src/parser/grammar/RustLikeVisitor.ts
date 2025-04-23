@@ -22,6 +22,8 @@ import { Block_exprContext } from "./RustLikeParser.js";
 import { IndexExprContext } from "./RustLikeParser.js";
 import { UnaryExprContext } from "./RustLikeParser.js";
 import { PrimaryExprContext } from "./RustLikeParser.js";
+import { RefExprContext } from "./RustLikeParser.js";
+import { DerefExprContext } from "./RustLikeParser.js";
 import { LogicalExprContext } from "./RustLikeParser.js";
 import { BinaryOpExprContext } from "./RustLikeParser.js";
 import { CallExprContext } from "./RustLikeParser.js";
@@ -163,6 +165,20 @@ export class RustLikeVisitor<Result> extends AbstractParseTreeVisitor<Result> {
      * @return the visitor result
      */
     visitPrimaryExpr?: (ctx: PrimaryExprContext) => Result;
+    /**
+     * Visit a parse tree produced by the `refExpr`
+     * labeled alternative in `RustLikeParser.expr`.
+     * @param ctx the parse tree
+     * @return the visitor result
+     */
+    visitRefExpr?: (ctx: RefExprContext) => Result;
+    /**
+     * Visit a parse tree produced by the `derefExpr`
+     * labeled alternative in `RustLikeParser.expr`.
+     * @param ctx the parse tree
+     * @return the visitor result
+     */
+    visitDerefExpr?: (ctx: DerefExprContext) => Result;
     /**
      * Visit a parse tree produced by the `logicalExpr`
      * labeled alternative in `RustLikeParser.expr`.
