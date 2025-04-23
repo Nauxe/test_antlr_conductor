@@ -85,12 +85,12 @@ export class RustLikeVirtualMachine {
   private heap: Heap;
 
   private isDebug: boolean; // Set to false in runInstrs to run without debug 
-  private trace: string = "";
+  private trace: { trc: string };
   private TRACE_BUFFER_SIZE: number = 10_000; // Avoid insane strings
 
   private pushTrace(line: string) {
-    if (this.isDebug && this.trace.length < this.TRACE_BUFFER_SIZE)
-      this.trace += line + "\n";
+    if (this.isDebug && this.trace.trc.length < this.TRACE_BUFFER_SIZE)
+      this.trace.trc += line + "\n";
   }
 
   private step() {
@@ -229,16 +229,16 @@ export class RustLikeVirtualMachine {
           if (this.OS.length === 0) {
             throw new Error("Stack underflow: Cannot call with empty stack");
           }
-          
+
           const fnItem = this.OS[this.OS.length - 1];
           if (!fnItem || (fnItem.tag !== Tag.CLOSURE && fnItem.tag !== Tag.CAPTURED_CLOSURE)) {
             throw new Error(`Cannot call non-function value: ${fnItem ? Tag[fnItem.tag] : 'undefined'}`);
           }
-          
+
           let funcAddr: number;
           let paramNames: string[];
           let capturedVars: Map<string, Item> = new Map();
-          
+
           if (fnItem.tag === Tag.CLOSURE) {
             // Handle regular closure
             const closureData = fnItem.value as ClosureValue;
@@ -251,23 +251,23 @@ export class RustLikeVirtualMachine {
             paramNames = capturedClosureData.paramNames;
             capturedVars = capturedClosureData.capturedVars;
           }
-          
+
           const numParams = paramNames.length;
           if (this.OS.length < numParams + 1) {
             throw new Error(`Not enough arguments for function call: expected ${numParams}, got ${this.OS.length - 1}`);
           }
-          
+
           // Save current environment and PC
           const returnPC = this.PC;
           const oldEnv = this.E;
-          
+
           // Pop arguments and the function
           const args: Item[] = [];
           for (let i = 0; i < numParams; i++) {
             args.unshift(this.OS.pop()!); // Get in reverse order
           }
           this.OS.pop(); // Remove function
-          
+
           // Create new frame for return
           const frame: Frame = {
             __return_pc: returnPC,
@@ -275,29 +275,29 @@ export class RustLikeVirtualMachine {
             bindings: new Map()
           };
           this.RTS.push(frame);
-          
+
           // Create new environment bindings
           const allBindings = new Map<string, Item>();
-          
+
           // Add captured variables
           for (const [name, value] of capturedVars.entries()) {
             allBindings.set(name, value);
           }
-          
+
           // Add parameters
           for (let i = 0; i < numParams; i++) {
             allBindings.set(paramNames[i], args[i]);
           }
-          
+
           // Create and set new environment
           this.E = JS_value_to_Item(this.heap, {
             parentAddr: oldEnv.value,
             bindings: allBindings
           });
-          
+
           // Jump to function body
           this.PC = funcAddr - 1; // -1 because PC gets incremented after each step
-          
+
         } catch (error) {
           console.error("Error in CALL instruction:", error);
           throw error;
@@ -486,7 +486,7 @@ export class RustLikeVirtualMachine {
       case Bytecode.INDEX: {
         const index = this.OS.pop()!;
         const container = this.OS.pop()!;
-        
+
         if (container.tag === Tag.ARRAY || container.tag === Tag.TUPLE) {
           const elements = container.value as Item[];
           if (index.value < 0 || index.value >= elements.length) {
@@ -524,9 +524,10 @@ export class RustLikeVirtualMachine {
   }
 
   // Run program
-  runInstrs(instrs: Inst[], isDebug: boolean = true): any {
+  runInstrs(instrs: Inst[], isDebug: boolean = true, trace = { trc: "" }): any {
     this.isDebug = isDebug;
     this.instrs = instrs;
+    this.trace = trace;
     return this.run();
   }
 
@@ -559,7 +560,7 @@ export class RustLikeVirtualMachine {
 
     const resultItem: Item = this.OS.pop();
 
-    let result = { value: "()", debugTrace: this.trace }; // Always return a value string as a result of execution
+    let result = { value: "()", debugTrace: this.trace.trc }; // Always return a value string as a result of execution
 
     // Always return a string as a result of execution
     if (!resultItem) { // Nothing on heap, return unit type

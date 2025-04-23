@@ -70,18 +70,19 @@ export class RustLikeEvaluator extends BasicEvaluator {
     }
 
     if (this.isDebug) {
-      this.conductor.sendOutput(`Compiled instructions: \n${this.compilerVisitor.instructions.map(
-        inst => `[${Bytecode[inst.opcode].padEnd(7)} ${inst.operand ?? ""}]\n`)
+      this.conductor.sendOutput(`Compiled instructions: ${this.compilerVisitor.instructions.map(
+        inst => `\n[${Bytecode[inst.opcode].padEnd(7)} ${inst.operand ?? ""}]`)
         }\n\n -------------------------- \n`);
     }
 
     // Run instructions on the virtual machine
     let result: { value: string, debugTrace: string };
+    const debugTrace = { trc: "" };
     try {
       if (this.compilerVisitor.instructions.length === 0) {
         throw new Error("No instructions to execute");
       }
-      result = this.VM.runInstrs(this.compilerVisitor.instructions, this.isDebug);
+      result = this.VM.runInstrs(this.compilerVisitor.instructions, this.isDebug, debugTrace);
 
       if (this.isDebug)
         this.conductor.sendOutput(`DEBUG:\n${result.debugTrace}\n\n -------------------------- \n`);
@@ -89,6 +90,10 @@ export class RustLikeEvaluator extends BasicEvaluator {
       // Send the result to the REPL
       this.conductor.sendOutput(`Result of expression: ${result.value}`);
     } catch (error) {
+
+      if (this.isDebug)
+        this.conductor.sendOutput(`DEBUG:\n${debugTrace.trc}\n\n -------------------------- \n`);
+
       // Handle errors and send them to the REPL
       this.conductor.sendOutput(`Runtime error: ${error instanceof Error ? error.message : String(error)}`);
     }
