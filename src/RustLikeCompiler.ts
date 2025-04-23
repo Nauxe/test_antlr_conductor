@@ -96,35 +96,43 @@ export class RustLikeCompilerVisitor
 
   /* functions are recognised but not compiled yet */
   visitFn_decl(ctx: Fn_declContext): Item {
-    const fnName = ctx.IDENTIFIER().getText();
-    
-    // Make sure block_expr exists
-    if (!ctx.block_expr()) {
-      throw new Error(`Function ${fnName} must have a body`);
-    }
-    
-    const block = ctx.block_expr();
-    
-    // Get parameter names and types
-    const paramNames: string[] = [];
-    const paramTypes: Item[] = [];
-    
     try {
-      if (ctx.param_list_opt() && ctx.param_list_opt().param_list()) {
-        const params = ctx.param_list_opt().param_list().param();
-        if (params) {
-          params.forEach((param) => {
-            paramNames.push(param.IDENTIFIER().getText());
-            paramTypes.push(new Item(Tag.UNIT, 0, 0)); // TODO: Parse actual types
-          });
-        }
+      const fnName = ctx.IDENTIFIER().getText();
+      
+      // Check that the function has a type
+      if (!ctx.type()) {
+        throw new Error(`Function ${fnName} must have a return type`);
       }
-    } catch (error) {
-      console.error("Error parsing parameters:", error);
-      throw new Error(`Error in parameter list for function ${fnName}`);
-    }
+      
+      // Explicitly check that the function has a body according to the grammar
+      if (!ctx.block_expr()) {
+        throw new Error(`Function ${fnName} must have a body`);
+      }
+      
+      const block = ctx.block_expr();
+      
+      // Get parameter names and types
+      const paramNames: string[] = [];
+      const paramTypes: Item[] = [];
+      
+      try {
+        if (ctx.param_list_opt() && ctx.param_list_opt().param_list()) {
+          const params = ctx.param_list_opt().param_list().param();
+          if (params) {
+            for (let i = 0; i < params.length; i++) {
+              const param = params[i];
+              if (param) {
+                paramNames.push(param.IDENTIFIER().getText());
+                paramTypes.push(new Item(Tag.UNIT, 0, 0)); // TODO: Parse actual types
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error parsing parameters:", error);
+        throw new Error(`Error in parameter list for function ${fnName}`);
+      }
 
-    try {
       // Scan the function body to get captured variables
       const scanRes = new ScopedScannerVisitor(block).visit(block);
       
@@ -163,15 +171,16 @@ export class RustLikeCompilerVisitor
         );
       });
 
-      // Compile function body
-      if (block && block.stmt_list() && block.stmt_list().stmt()) {
+      // Compile function body - check if block has statements
+      if (block.stmt_list() && block.stmt_list().stmt()) {
         const stmts = block.stmt_list().stmt();
-        stmts.forEach((s) => {
-          if (s) this.visit(s);
-        });
+        for (let i = 0; i < stmts.length; i++) {
+          if (stmts[i]) this.visit(stmts[i]);
+        }
       }
       
-      if (block && block.expr()) {
+      // Compile the expression at the end of the block
+      if (block.expr()) {
         this.visit(block.expr());
       } else {
         // If no expression, add a unit value
@@ -182,12 +191,11 @@ export class RustLikeCompilerVisitor
       this.instructions.push(new Inst(Bytecode.EXIT_SCOPE));
       this.instructions.push(new Inst(Bytecode.RET));
       
+      return this.defaultResult();
     } catch (error) {
-      console.error("Error in function body compilation:", error);
-      throw new Error(`Error in function body for ${fnName}: ${error.message}`);
+      console.error("Error in function declaration:", error);
+      throw error;
     }
-
-    return this.defaultResult();
   }
 
   /*  print!(expr);   ->   expr  ·  LDPS "print!"  ·  CALL  */
@@ -443,16 +451,17 @@ export class RustLikeCompilerVisitor
     try {
       // Visit all statements
       if (ctx.stmt_list() && ctx.stmt_list().stmt()) {
-        ctx.stmt_list().stmt().forEach((stmt) => {
-          if (stmt) this.visit(stmt);
-        });
+        const stmts = ctx.stmt_list().stmt();
+        for (let i = 0; i < stmts.length; i++) {
+          if (stmts[i]) this.visit(stmts[i]);
+        }
       }
       
-      // Visit the final expression
+      // Visit the final expression if it exists
       if (ctx.expr()) {
         return this.visit(ctx.expr());
       } else {
-        // No final expression, return unit
+        // No expression in the block, return unit value
         this.instructions.push(new Inst(Bytecode.LDCI, 0)); // UNIT value
         return this.defaultResult();
       }
