@@ -122,7 +122,7 @@ export class RustLikeCompilerVisitor
               const param = params[i];
               if (param) {
                 paramNames.push(param.IDENTIFIER().getText());
-                paramTypes.push(new Item(Tag.UNIT, 0, 0)); // TODO: Parse actual types
+                paramTypes.push(this.visit(param.type()));
               }
             }
           }
@@ -141,7 +141,7 @@ export class RustLikeCompilerVisitor
         captureTypes: scanRes.types,
         paramNames: paramNames,
         paramTypes: paramTypes,
-        retType: new Item(Tag.UNIT, 0, 0), // TODO: Parse return type
+        retType: this.visit(ctx.type()),
       });
 
       // Declare the function
@@ -161,14 +161,14 @@ export class RustLikeCompilerVisitor
       this.instructions.push(new Inst(Bytecode.ENTER_SCOPE, scanRes.names.length + paramNames.length));
 
       // Bind parameters
-      paramNames.forEach((name) => {
+      for (let i = 0; i < paramNames.length; i++) {
         this.instructions.push(
           new Inst(Bytecode.DECL, {
-            name,
-            rustLikeType: new Item(Tag.UNIT, 0, 0), // TODO: Use actual param types
+            name: paramNames[i],
+            rustLikeType: paramTypes[i],
           })
         );
-      });
+      }
 
       // Compile function body - check if block has statements
       if (block.stmt_list() && block.stmt_list().stmt()) {
@@ -498,20 +498,26 @@ export class RustLikeCompilerVisitor
   }
 
   visitCallExpr(ctx: CallExprContext): Item {
-    // Evaluate receiver
-    this.visit(ctx.expr());
+    try {
+      // Visit the function expression
+      this.visit(ctx.expr());
 
-    // Evaluate arguments in order
-    if (ctx.arg_list_opt().expr() !== null) {
-      ctx.arg_list_opt().expr().forEach((arg) => {
-        this.visit(arg);
-      });
+      // Visit all arguments
+      if (ctx.arg_list_opt() && ctx.arg_list_opt().expr()) {
+        const args = ctx.arg_list_opt().expr();
+        for (let i = 0; i < args.length; i++) {
+          this.visit(args[i]);
+        }
+      }
+
+      // Call the function
+      this.instructions.push(new Inst(Bytecode.CALL, ctx.arg_list_opt() ? ctx.arg_list_opt().expr().length : 0));
+
+      return this.defaultResult();
+    } catch (error) {
+      console.error("Error in function call:", error);
+      throw error;
     }
-
-    // Call the function
-    this.instructions.push(new Inst(Bytecode.CALL));
-
-    return this.defaultResult();
   }
 
   visitArray_literal(ctx: Array_literalContext): Item {

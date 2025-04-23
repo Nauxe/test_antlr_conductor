@@ -374,7 +374,7 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
       throw new Error(`Expected function type for ${fnName}, found ${typeToString(idType)}.`);
     }
 
-    const fnType: FnType = idType;
+    const fnType: FnType = idType as FnType;
     const argTypes =
       ctx.arg_list_opt() === null
         ? []
@@ -383,12 +383,12 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
         );
 
     if (argTypes.length !== fnType.paramTypes.length) {
-      throw new Error(`Function takes ${fnType.paramTypes.length} arguments but ${argTypes.length} were supplied.`);
+      throw new Error(`Function ${fnName} takes ${fnType.paramTypes.length} arguments but ${argTypes.length} were supplied.`);
     }
 
     for (let i = 0; i < argTypes.length; i++) {
       if (!typeEqual(argTypes[i], fnType.paramTypes[i])) {
-        throw new Error(`Mismatched types, expected ${typeToString(fnType.paramTypes[i])} at index ${i}, found ${typeToString(argTypes[i])}.`);
+        throw new Error(`Mismatched types in function call to ${fnName}, expected ${typeToString(fnType.paramTypes[i])} at index ${i}, found ${typeToString(argTypes[i])}.`);
       }
     }
 
@@ -466,6 +466,11 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
     // Enter scope
     this.typeEnv = this.typeEnv.extend(scanRes);
 
+    // Add parameters to scope
+    for (let i = 0; i < paramNames.length; i++) {
+      this.typeEnv.types.set(paramNames[i], paramTypes[i]);
+    }
+
     // Check return types
     const retType = parseType(ctx.type());
     const bodyType: RustLikeType = this.visit(block);
@@ -475,14 +480,14 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
     // Exit scope
     this.typeEnv = this.typeEnv.parent;
 
-    // Initalize fnType with values
+    // Initialize fnType with values
     fnType = {
       tag: Tag.CLOSURE,
       captureNames: scanRes.names,
       captureTypes: scanRes.types,
       paramNames: paramNames,
       paramTypes: paramTypes,
-      retType: bodyType,
+      retType: retType,
     };
 
     // Add declaration
