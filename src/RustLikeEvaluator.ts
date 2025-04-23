@@ -35,12 +35,6 @@ export class RustLikeEvaluator extends BasicEvaluator {
       // Parse the input
       tree = parser.prog();
 
-      // If we have errors in parsing, report them
-      if (parser.numberOfSyntaxErrors > 0) {
-        this.conductor.sendOutput(`Parse errors: ${parser.numberOfSyntaxErrors} syntax errors detected`);
-        return;
-      }
-
       this.conductor.sendOutput(`Parsed successfully.`);
 
       // Debug output for the AST
