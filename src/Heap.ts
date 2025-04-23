@@ -169,8 +169,18 @@ export class Heap {
           let value: any;
           if (tag === Tag.NUMBER || tag === Tag.BOOLEAN) {
             value = this.dataView.getUint8(ptr++); // Assume 1-byte values for simplicity
-          } else if (tag === Tag.CLOSURE || tag === Tag.CAPTURED_CLOSURE) {
-            throw new Error("Cannot deserialize closure from heap"); // Closures aren't stored in heap
+          } else if (tag === Tag.CLOSURE) {
+            value = {
+              funcAddr: this.dataView.getUint8(ptr++),
+              captureNames: [],
+              paramNames: []
+            };
+          } else if (tag === Tag.CAPTURED_CLOSURE) {
+            value = {
+              funcAddr: this.dataView.getUint8(ptr++),
+              capturedVars: new Map<string, Item>(),
+              paramNames: []
+            };
           } else {
             value = this.dataView.getUint8(ptr++); // Get heap addr
           }
@@ -206,7 +216,7 @@ export class Heap {
 
         // Store parent address
         this.dataView.setUint8(ptr++, parentAddr ?? 0xFF); // 0xFF = null
-        this.dataView.setUint8(ptr++, bindings.length); // Store number of bindings
+        this.dataView.setUint8(ptr++, bindings.size); // Store number of bindings
 
         const children: number[] = [0]; // Offset of parent is 0
         for (const [key, item] of bindings) {
@@ -221,11 +231,12 @@ export class Heap {
           this.dataView.setUint8(ptr++, item.size);
 
           // Write value 
-
           if (item.tag === Tag.NUMBER || item.tag === Tag.BOOLEAN) {
             this.dataView.setUint8(ptr++, item.value);
-          } else if (item.tag === Tag.CLOSURE || item.tag === Tag.CAPTURED_CLOSURE) {
-            throw new Error("Cannot serialize closures to heap");
+          } else if (item.tag === Tag.CLOSURE) {
+            this.dataView.setUint8(ptr++, item.value.funcAddr);
+          } else if (item.tag === Tag.CAPTURED_CLOSURE) {
+            this.dataView.setUint8(ptr++, item.value.funcAddr);
           } else {
             this.dataView.setUint8(ptr++, item.value);    // Store heap addr
           }

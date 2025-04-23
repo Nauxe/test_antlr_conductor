@@ -441,8 +441,10 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
     let bodyType: RustLikeType;
     if (ctx.block_expr()) {
       bodyType = this.visit(ctx.block_expr());
-    } else {
+    } else if (ctx.block_stmt()) {
       bodyType = this.visit(ctx.block_stmt());
+    } else {
+      throw new Error(`Function ${fnName} must have a body`);
     }
 
     // Restore the old environment
@@ -453,7 +455,8 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
       throw new Error(`Function ${fnName} body type ${bodyType.tag} does not match return type ${fnRetType.tag}`);
     }
 
-    return {
+    // Add the function to the environment
+    const fnType: FnType = {
       tag: Tag.CLOSURE,
       captureNames: [], // To be initialized in other visitors 
       captureTypes: [], // To be initalized in other visitors
@@ -461,6 +464,9 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
       paramTypes: paramTypes,
       retType: fnRetType,
     };
+    this.typeEnv.types.set(fnName, fnType);
+
+    return UNIT_TYPE;
   }
 
   visitPrint_stmt(ctx: Print_stmtContext): RustLikeType {
