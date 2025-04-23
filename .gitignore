@@ -25,3 +25,5 @@ src/parser/RustLikeVisitor.ts
 test_function.rs
 src/parser/SimpleLang.interp
 src/parser/SimpleLangLexer.interp
+src/parser/SimpleLang.interp
+src/parser/SimpleLangLexer.interp
