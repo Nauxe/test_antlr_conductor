@@ -39,6 +39,25 @@ export function typeEqual(a: RustLikeType, b: RustLikeType): boolean {
 
 export type ScanResult = { names: string[]; types: RustLikeType[] };
 
+export function typeToString(rlType: RustLikeType): string {
+  if (typeEqual(rlType, UNIT_TYPE)) {
+    return ' () ';
+  } else if (typeEqual(rlType, U32_TYPE)) {
+    const u32Type = rlType as U32Type;
+    return ' ' + u32Type.val + ':u32 ';
+  } else if (typeEqual(rlType, BOOL_TYPE)) {
+    const boolType = rlType as BoolType;
+    return ' ' + boolType.val + ' ';
+  } else if (typeEqual(rlType, STRING_TYPE)) {
+    return ' String ';
+  } else { // Can only be a function type here 
+    const fnType = rlType as FnType;
+    return ' fn (' + fnType.paramTypes.reduce(
+      (acc, paramType) => acc + typeToString(paramType) + ',', '')
+      + ') ->' + typeToString(fnType.retType);
+  }
+}
+
 export function parseType(ctx: TypeContext): RustLikeType {
   if (ctx.getText() === '()') {
     return UNIT_TYPE;
@@ -250,7 +269,7 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   visitUnaryExpr(ctx: UnaryExprContext): RustLikeType {
     let type1 = this.visit(ctx.expr());
     if (!typeEqual(type1, BOOL_TYPE))
-      throw new Error(`Expected bool for ! operator, got ${type1}.`);
+      throw new Error(`Expected bool for ! operator, got ${typeToString(type1)}.`);
     type1 = type1 as BoolType;
     return { tag: type1.tag, val: !type1.val };
   }
@@ -274,13 +293,13 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
           return { tag: Tag.NUMBER, val: type1.val + type2.val };
         case '-':
           if (type1.val < type2.val)
-            throw new Error(`${type1.val}-${type2.val} operation will cause u32 to overflow.`);
+            throw new Error(`${typeToString(type1)}-${typeToString(type2)} operation will cause u32 to overflow.`);
           return { tag: Tag.NUMBER, val: type1.val - type2.val };
         case '*':
           return { tag: Tag.NUMBER, val: type1.val * type2.val };
         case '/':
           if (type2.val === 0)
-            throw new Error(`${type1.val}/${type2.val} operation will cause division by zero error.`);
+            throw new Error(`${typeToString(type1)}/${typeToString(type2)} operation will cause division by zero error.`);
           return { tag: Tag.NUMBER, val: type1.val / type2.val };
         case '!=':
           return { tag: Tag.BOOLEAN, val: type1.val !== type2.val };
@@ -315,10 +334,10 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
         case '>=':
           return { tag: Tag.BOOLEAN, val: type1.val >= type2.val };
         default:
-          throw new Error(`Expected u32 types for binary operation ${op}, got ${type1} and ${type2}.`);
+          throw new Error(`Expected u32 types for binary operation ${op}, got ${typeToString(type1)} and ${typeToString(type2)}.`);
       }
     } else {
-      throw new Error(`Expected u32 or boolean types for binary operation ${op} got ${type1} and ${type2}.`);
+      throw new Error(`Expected u32 or boolean types for binary operation ${op} got ${typeToString(type1)} and ${typeToString(type2)}.`);
     }
   }
 
@@ -330,7 +349,7 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
       throw new Error(`Mismatched types in logical binary operation.`);
 
     if (!typeEqual(type1, BOOL_TYPE))
-      throw new Error(`Expected bool types for binary operation ${op}, got ${type1} and ${type2}.`);
+      throw new Error(`Expected bool types for binary operation ${op}, got ${typeToString(type1)} and ${typeToString(type2)}.`);
 
     // Safe to cast now
     type1 = type1 as BoolType;
@@ -348,7 +367,7 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
     const fnName: string = ctx.expr().getText();
     const idType: RustLikeType = this.typeEnv.lookUpType(fnName);
     if (idType.tag !== Tag.CLOSURE) {
-      throw new Error(`Expected function type for ${fnName}, found ${idType}`);
+      throw new Error(`Expected function type for ${fnName}, found ${typeToString(idType)}.`);
     }
 
     const fnType: FnType = idType;
@@ -365,7 +384,7 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
 
     for (let i = 0; i < argTypes.length; i++) {
       if (!typeEqual(argTypes[i], fnType.paramTypes[i])) {
-        throw new Error(`Mismatched types, expected ${JSON.stringify(fnType.paramTypes[i])}, found ${JSON.stringify(argTypes[i])}.`);
+        throw new Error(`Mismatched types, expected ${typeToString(fnType.paramTypes[i])} at index ${i}, found ${typeToString(argTypes[i])}.`);
       }
     }
 
@@ -415,7 +434,7 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
     const declType = parseType(ctx.type());
     const exprType = this.visit(ctx.expr());
     if (!typeEqual(declType, exprType))
-      throw new Error(`Expected type ${declType} in declaration for ${name}, got ${exprType}.`);
+      throw new Error(`Expected type ${typeToString(declType)} in declaration for ${name}, got ${typeToString(exprType)}.`);
     this.typeEnv.types.set(name, exprType);
     return UNIT_TYPE;
   }
@@ -447,7 +466,7 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
     const retType = parseType(ctx.type());
     const bodyType: RustLikeType = this.visit(block);
     if (!typeEqual(retType, bodyType))
-      throw new Error(`Expected return type ${retType} in function declaration for ${name}, got ${bodyType}.`);
+      throw new Error(`Expected return type ${typeToString(retType)} in function declaration for ${name}, got ${typeToString(bodyType)}.`);
 
     // Exit scope
     this.typeEnv = this.typeEnv.parent;
@@ -470,7 +489,7 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   visitPrint_stmt(ctx: Print_stmtContext): RustLikeType {
     const exprType = this.visit(ctx.expr());
     if (!typeEqual(exprType, STRING_TYPE))
-      throw new Error(`print! expected String, got ${exprType}.`);
+      throw new Error(`print! expected String, got ${typeToString(exprType)}.`);
 
     return UNIT_TYPE;
   }

@@ -44,7 +44,7 @@ export class RustLikeEvaluator extends BasicEvaluator {
       new RustLikeTypeCheckerVisitor(this.isDebug).visit(tree);
     } catch (error) {
       // Handle errors and send them to the REPL
-      this.conductor.sendOutput(`Type checker error: ${error instanceof Error ? error.message : String(error)}`);
+      this.conductor.sendOutput(`Type checker error:\n${error instanceof Error ? error.message : String(error)}\n\n -------------------------- \n`);
 
     }
 
