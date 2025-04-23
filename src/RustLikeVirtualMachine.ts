@@ -1,29 +1,12 @@
-import {
-  Tag,
-  Heap,
-  Item,
-  is_primitive,
-  JS_value_to_Item,
-  addr_to_Item,
-  EnvironmentValue,
-  CapturedClosureValue,
-  ClosureValue,
-} from "./Heap";
+import { Tag, Heap, Item, is_primitive, JS_value_to_Item, addr_to_Item, EnvironmentValue, CapturedClosureValue, ClosureValue } from "./Heap"
 
-/*  ───────────── Byte-code set ───────────── */
-
-export enum Bytecode {
-  // To be put on operand stack
+export enum Bytecode { // To be put on operand stack
   NOP = 0, // No op
   POP = 1,
   DONE = 2,
-
-  /* constants */
-  LDCI = 3, // Load constant integer
+  LDCI = 3, // Load constant integer 
   LDCB = 4, // Load constant boolean
   LDCS = 5, // Load constant string
-
-  /* arithmetic */
   PLUS = 6,
   TIMES = 7,
   NOT = 8,
@@ -31,85 +14,48 @@ export enum Bytecode {
   OR = 10,
   LT = 11, // Less than
   EQ = 12, // Equal
-
-  /* control-flow */
   JOF = 13, // Jump on false
   GOTO = 14,
-
-  /* symbols & calls */
   LDHS = 15, // Load heap symbolic (for strings and functions)
   LDPS = 16, // Load primitive symbolic
   CALL = 17,
-
-  /* scopes */
   ENTER_SCOPE = 18,
   EXIT_SCOPE = 19,
-
-  ASSIGN = 20, // Assign the value on the operand stack
+  ASSIGN = 20, // Assign the value on the operand stack 
   FREE = 21,
-
-  /* closures */
   LDCC = 22, // Load constant closure
   RET = 23,
-  DECL = 24, // Declare identifier
-
-  /*  new in this patch  */
-  MINUS = 25,
-  DIV = 26,
-  MOD = 27,
-  LE = 28,
-  GE = 29,
-  NE = 30,
+  DECL = 24, // Declare identifier 
 }
 
-/*  Numbers of items *popped* from the operand stack.
-    (Binary ops show “0” because they pop two items
-    *inside* the micro-code, not via an explicit operand.)               */
+// Represents numbers of elements popped from OS to run the instruction 
 export const BytecodeArity: Record<Bytecode, number> = {
-  [Bytecode.NOP]: 0,
+  [Bytecode.NOP]: 0, // No op
   [Bytecode.POP]: 0,
   [Bytecode.DONE]: 0,
-
-  [Bytecode.LDCI]: 1,
-  [Bytecode.LDCB]: 1,
+  [Bytecode.LDCI]: 1, // Load constant integer 
+  [Bytecode.LDCB]: 1, // Load constant boolean
   [Bytecode.LDCS]: 1,
-
   [Bytecode.PLUS]: 0,
   [Bytecode.TIMES]: 0,
-  [Bytecode.MINUS]: 0,
-  [Bytecode.DIV]: 0,
-  [Bytecode.MOD]: 0,
-
   [Bytecode.NOT]: 0,
   [Bytecode.AND]: 0,
   [Bytecode.OR]: 0,
-
-  [Bytecode.LT]: 0,
-  [Bytecode.LE]: 0,
-  [Bytecode.GE]: 0,
-  [Bytecode.EQ]: 0,
-  [Bytecode.NE]: 0,
-
-  [Bytecode.JOF]: 1,
+  [Bytecode.LT]: 0, // Less than
+  [Bytecode.EQ]: 0, // Equal
+  [Bytecode.JOF]: 1, // Jump on false
   [Bytecode.GOTO]: 1,
-
-  [Bytecode.LDHS]: 1,
-  [Bytecode.LDPS]: 1,
+  [Bytecode.LDHS]: 1, // Load from heap scope
+  [Bytecode.LDPS]: 1, // Load primitive symbolic from stack (only primitive symbolic in the machine is a closure)
   [Bytecode.CALL]: 1,
-
-  [Bytecode.ENTER_SCOPE]: 1,
+  [Bytecode.ENTER_SCOPE]: 1, // Operand: Size of scope
   [Bytecode.EXIT_SCOPE]: 1,
-
   [Bytecode.ASSIGN]: 0,
   [Bytecode.FREE]: 1,
-
   [Bytecode.LDCC]: 1,
   [Bytecode.RET]: 0,
-
-  [Bytecode.DECL]: 0,
-};
-
-/*  ───────────── Runtime types ───────────── */
+  [Bytecode.DECL]: 0, // Operand: { name: string, type: RustLikeType }
+}
 
 export interface Frame {
   __return_pc: number;
@@ -117,299 +63,426 @@ export interface Frame {
   bindings: Map<string, Item>; // For closure bindings
 }
 
-/*  ───────────── Virtual Machine ───────────── */
-
 export class RustLikeVirtualMachine {
   private instrs: Inst[];
-  private OS: Item[]; // Operand stack
+
+  private OS: Item[]; // Item stack 
   private PC: number;
-  private E: Item; // Current environment (heap pointer)
+  private E: Item; // Heap address
   private RTS: Frame[];
   private heap: Heap;
 
-  private isDebug = false;
-  private trace = "";
-  private readonly TRACE_BUFFER_SIZE = 10_000; // Avoid insane strings
+  private isDebug: boolean; // Set to false in runInstrs to run without debug 
+  private trace: string = "";
+  private TRACE_BUFFER_SIZE: number = 10_000; // Avoid insane strings
 
   private pushTrace(line: string) {
     if (this.isDebug && this.trace.length < this.TRACE_BUFFER_SIZE)
       this.trace += line + "\n";
   }
 
-  /*  One micro-step  */
   private step() {
     const inst = this.instrs[this.PC];
 
     if (this.isDebug)
       this.pushTrace(
-        `[${String(this.PC).padStart(3)}] ${Bytecode[inst.opcode].padEnd(7)} ${
-          inst.operand ?? ""
-        }  OS→ ${this.OS.map((it) =>
+        `[${String(this.PC).padStart(3)}] ${Bytecode[inst.opcode].padEnd(7)} ${inst.operand ?? ""
+        }  OS→ ${this.OS.map(it =>
           is_primitive(it.tag) ? it.value : `<${Tag[it.tag]}>`
-        ).join(" ")}`
+        ).join(" ")
+        }`
       );
 
     switch (inst.opcode) {
-      /* ───── trivial stack ops ───── */
-      case Bytecode.NOP:
+      case Bytecode.NOP: {
+        // Nothing, NOP
         return;
-
-      case Bytecode.POP:
-        this.OS.pop();
+      }
+      case Bytecode.POP: {
+        this.OS.pop()!;
         return;
-
-      case Bytecode.DONE:
+      }
+      case Bytecode.DONE: {
+        return; // Should not reach this point
+      }
+      case Bytecode.LDCI: {
+        if (typeof inst.operand === 'number') {
+          this.OS.push(JS_value_to_Item(this.heap, inst.operand));
+        } else {
+          throw new Error("Non integer found");
+        }
         return;
-
-      /* ───── constants ───── */
-      case Bytecode.LDCI:
-        if (typeof inst.operand !== "number") throw new Error("Non integer found");
-        this.OS.push(JS_value_to_Item(this.heap, inst.operand));
-        return;
-
-      case Bytecode.LDCB:
-        if (typeof inst.operand !== "boolean") throw new Error("Non boolean found");
-        this.OS.push(JS_value_to_Item(this.heap, inst.operand));
-        return;
-
-      case Bytecode.LDCS:
-        if (typeof inst.operand !== "string") throw new Error("Non string found");
-        this.OS.push(JS_value_to_Item(this.heap, inst.operand));
-        return;
-
-      /* ───── arithmetic ───── */
+      }
+      case Bytecode.LDCB: {
+        if (typeof inst.operand === 'boolean') {
+          this.OS.push(JS_value_to_Item(this.heap, inst.operand));
+        } else {
+          throw new Error("Non boolean found");
+        }
+        break;
+      }
+      case Bytecode.LDCS: {
+        if (typeof inst.operand === 'string') {
+          this.OS.push(JS_value_to_Item(this.heap, inst.operand));
+        } else {
+          throw new Error("Non string found");
+        }
+        break;
+      }
       case Bytecode.PLUS: {
         const b = this.OS.pop()!;
         const a = this.OS.pop()!;
-        this.OS.push(JS_value_to_Item(this.heap, a.value + b.value));
-        break;
-      }
-      case Bytecode.MINUS: {
-        const b = this.OS.pop()!;
-        const a = this.OS.pop()!;
-        this.OS.push(JS_value_to_Item(this.heap, a.value - b.value));
+        const res = JS_value_to_Item(this.heap, a.value + b.value);
+        this.OS.push(res);
         break;
       }
       case Bytecode.TIMES: {
         const b = this.OS.pop()!;
         const a = this.OS.pop()!;
-        this.OS.push(JS_value_to_Item(this.heap, a.value * b.value));
+        const res = JS_value_to_Item(this.heap, a.value * b.value);
+        this.OS.push(res);
         break;
       }
-      case Bytecode.DIV: {
-        const b = this.OS.pop()!;
-        const a = this.OS.pop()!;
-        this.OS.push(JS_value_to_Item(this.heap, Math.floor(a.value / b.value)));
-        break;
-      }
-      case Bytecode.MOD: {
-        const b = this.OS.pop()!;
-        const a = this.OS.pop()!;
-        this.OS.push(JS_value_to_Item(this.heap, a.value % b.value));
-        break;
-      }
-
-      /* ───── boolean / comparison ───── */
       case Bytecode.NOT: {
-        const v = this.OS.pop()!;
-        this.OS.push(JS_value_to_Item(this.heap, !v.value));
+        const item = this.OS.pop()!;
+        this.OS.push(JS_value_to_Item(this.heap, !item.value));
         break;
       }
       case Bytecode.AND: {
         const b = this.OS.pop()!;
         const a = this.OS.pop()!;
-        this.OS.push(JS_value_to_Item(this.heap, a.value && b.value));
+        const res = JS_value_to_Item(this.heap, a.value && b.value);
+        this.OS.push(res);
         break;
       }
       case Bytecode.OR: {
         const b = this.OS.pop()!;
         const a = this.OS.pop()!;
-        this.OS.push(JS_value_to_Item(this.heap, a.value || b.value));
+        const res = JS_value_to_Item(this.heap, a.value || b.value);
+        this.OS.push(res);
         break;
       }
-
       case Bytecode.LT: {
         const b = this.OS.pop()!;
         const a = this.OS.pop()!;
-        this.OS.push(JS_value_to_Item(this.heap, a.value < b.value));
+        const res = JS_value_to_Item(this.heap, a.value < b.value);
+        this.OS.push(res);
         break;
       }
-      case Bytecode.LE: {
+      case Bytecode.EQ: { // Should work on heap allocated objects too since value can be either a pointer or a primitive
         const b = this.OS.pop()!;
         const a = this.OS.pop()!;
-        this.OS.push(JS_value_to_Item(this.heap, a.value <= b.value));
+        const res = JS_value_to_Item(this.heap, a.value === b.value);
+        this.OS.push(res);
         break;
       }
-      case Bytecode.GE: {
-        const b = this.OS.pop()!;
-        const a = this.OS.pop()!;
-        this.OS.push(JS_value_to_Item(this.heap, a.value >= b.value));
-        break;
+      case Bytecode.GOTO: {
+        this.PC = inst.operand! - 1; // -1 since PC is incremented every step
+        return
       }
-      case Bytecode.EQ: {
-        const b = this.OS.pop()!;
-        const a = this.OS.pop()!;
-        this.OS.push(JS_value_to_Item(this.heap, a.value === b.value));
-        break;
-      }
-      case Bytecode.NE: {
-        const b = this.OS.pop()!;
-        const a = this.OS.pop()!;
-        this.OS.push(JS_value_to_Item(this.heap, a.value !== b.value));
-        break;
-      }
-
-      /* ───── control-flow ───── */
-      case Bytecode.GOTO:
-        this.PC = inst.operand! - 1; // -1 because PC++ after step()
-        return;
-
-      /* ───── symbol look-ups ───── */
       case Bytecode.LDHS: {
-        /* … unchanged … */
         const name = inst.operand as string;
 
         let envItem = this.E;
-        while (envItem.value !== 0xff) {
+        while (envItem.value !== 0xFF) {
           const env = this.heap.get_data(envItem) as EnvironmentValue;
           if (env.bindings.has(name)) {
-            this.OS.push(env.bindings.get(name)!);
-            return;
+            const item = env.bindings.get(name)!;
+            this.OS.push(item); // Item may be primitive or heap allocated
+            break;
           }
           envItem = addr_to_Item(this.heap, env.parentAddr);
         }
 
         throw new Error(`Unbound symbol in heap scope: ${name}`);
       }
-
-      case Bytecode.LDPS: {
-        /* … identical to previous version … */
+      case Bytecode.LDPS: { // This should only be used to load closures! (uncaptured) 
+        // Call LDCC after to capture appropriate values.
         const name = inst.operand as string;
+
+        // Search top-down in RTS (treat as an environment stack)
         for (let i = this.RTS.length - 1; i >= 0; i--) {
           const frame = this.RTS[i];
-          if (frame.bindings.has(name)) {
-            this.OS.push(frame.bindings.get(name)!);
+          if (frame instanceof Map && frame.has(name)) {
+            const value = frame.get(name);
+            this.OS.push(JS_value_to_Item(this.heap, value));
             return;
           }
         }
+
         throw new Error(`Unbound primitive symbol: ${name}`);
       }
-
-      /* ───── calls / closures ───── */
       case Bytecode.CALL: {
-        /* … existing call logic unchanged … */
-        /* (omitted for brevity – the body is the same as in the user’s file) */
+        // Current closure implementation assumes no names are declared within closures themselves
+        // ^ This is related to one TODO below
+
+        const fnItem = this.OS.pop()!;
+        if (fnItem.tag !== Tag.CAPTURED_CLOSURE) {
+          throw new Error("CALL expects a closure");
+        }
+
+        const { funcAddr, capturedVars, paramNames } = fnItem.value as CapturedClosureValue;
+
+        // Pop args in reverse order
+        const args: Item[] = [];
+        for (let i = 0; i < paramNames.length; i++) {
+          args.unshift(this.OS.pop()!); // reverse order
+        }
+
+        const allBindings = new Map<string, Item>();
+
+        // Insert captures into newBindings
+        for (const [name, item] of capturedVars.entries()) {
+          allBindings.set(name, item);
+        }
+
+        // Insert args (or shadow captures if same name) into newBindings
+        for (let i = 0; i < paramNames.length; i++) {
+          const name = paramNames[i];
+          allBindings.set(name, args[i]);
+        }
+
+        // TODO: add bindings declared in the function here after scanning them 
+
+        // Split bindings into bindings of stack allocated and heap allocated objects
+        const heapBindings = new Map<string, Item>();
+        const stackBindings = new Map<string, Item>(); // Only closures should be here
+
+        for (const [name, item] of allBindings) {
+          if (item.tag === Tag.CLOSURE) {
+            stackBindings.set(name, item);
+          } else {
+            heapBindings.set(name, item);
+          }
+        }
+
+        // Create a new environment that extends the function's environment
+        // TODO/Extension: possibly allocate based on amount of space needed for the closure, 
+        // this can be scanned during compilation
+        const newEnv: Item = this.heap.allocEnv(128);
+        const envData = {
+          parentAddr: newEnv,
+          bindings: heapBindings,
+        };
+        this.heap.set_data(newEnv, envData);
+
+        // Save current environment and PC onto RTS
+        const newFrame: Frame = {
+          __return_pc: this.PC,
+          __old_env: this.E,
+          bindings: stackBindings,
+        }
+        this.RTS.push(newFrame);
+
+        this.E = newEnv.value;
+        this.PC = funcAddr - 1; // -1 because PC is incremented after step()
         break;
       }
-
-      /* ───── scopes ───── */
       case Bytecode.ENTER_SCOPE: {
-        /* use operand as the requested environment size, or a
-           sensible default when the compiler passes “undefined” */
-        const requested = typeof inst.operand === "number" ? inst.operand : 128;
-        const newEnv = this.heap.allocEnv(requested);
-        this.heap.set_data(newEnv.value, {
+        const newEnv = this.heap.allocEnv(128);
+        const newEnvData = {
           parentAddr: this.E,
-          bindings: new Map<string, Item>(),
-        });
+          bindings: new Map<string, Item>()
+        };
+        this.heap.set_data(newEnv.value, newEnvData);
         this.E = newEnv.value;
         break;
       }
-
       case Bytecode.EXIT_SCOPE: {
-        const cur = this.heap.get_data(this.E) as EnvironmentValue;
-        if (cur.parentAddr === null)
+        const currentEnv = this.heap.get_data(this.E) as EnvironmentValue;
+        if (currentEnv.parentAddr === null) {
           throw new Error("Cannot exit global scope");
-        this.E = addr_to_Item(this.heap, cur.parentAddr);
-        break;
-      }
-
-      /* ───── assignment & declaration ───── */
-      case Bytecode.DECL: {
-        /*  first allocate a slot in the *current* environment.
-            If the variable ends up holding a closure the runtime
-            will update RTS instead (see ASSIGN).                         */
-        const { name, rustLikeType } = inst.operand!;
-        if (rustLikeType.tag === Tag.CLOSURE) {
-          /* function declaration handled elsewhere                      */
-        } else {
-          const env = this.heap.get_data(this.E) as EnvironmentValue;
-          env.bindings.set(name, undefined);
         }
+        this.E = addr_to_Item(this.heap, currentEnv.parentAddr);
         break;
       }
-
-      case Bytecode.ASSIGN: {
+      case Bytecode.ASSIGN: { // OS should contain an Item bound on either RTS or Environment, inst.operand should be a string identifier to assign the Item to 
         const name = inst.operand as string;
         const val = this.OS.pop()!;
 
-        /* First try RTS (for stack-resident closures) */
+        // Assign to RTS if name refers to a closure Item
         for (let i = this.RTS.length - 1; i >= 0; i--) {
-          const f = this.RTS[i];
-          if (f.bindings.has(name)) {
-            const existing = f.bindings.get(name)!;
+          const frame = this.RTS[i];
+          if ('bindings' in frame && frame.bindings.has(name)) {
+            const existing = frame.bindings.get(name)!;
             if (existing.tag === Tag.CLOSURE) {
-              f.bindings.set(name, val);
+              frame.bindings.set(name, val); // Only update if it's a closure
               return;
             }
           }
         }
 
-        /* … otherwise write into the nearest heap environment … */
+        // Otherwise, assign to environment
         let envItem = this.E;
-        while (envItem.value !== 0xff) {
+        while (envItem !== null) {
           const env = this.heap.get_data(envItem) as EnvironmentValue;
           if (env.bindings.has(name)) {
-            env.bindings.set(name, val);
-            return;
+            env.bindings.set(name, val.value);
+            this.heap.set_data(envItem, env);
+            break;
           }
           envItem = addr_to_Item(this.heap, env.parentAddr);
         }
-        throw new Error(`Unbound variable on ASSIGN: ${name}`);
-      }
-
-      /* ───── remaining op-codes unchanged ───── */
-      case Bytecode.FREE:
-      case Bytecode.LDCC:
-      case Bytecode.RET:
-        /*  … identical to the user file, omitted for brevity … */
         break;
+      }
+      case Bytecode.FREE: {
+        const item = this.OS.pop()!;
+        if (!is_primitive(item.tag)) { // Assume item on OS is heap allocated
+          this.heap.free(item.value);
+        }
+        break;
+      }
+      case Bytecode.LDCC: { // This has to be followed by a CALL instruction and be after a LDPS instruction
+        // captureNames: string[], paramNames: string[]
+        // captureNames contain all names used in the function
+        const { funcAddr, captureNames, paramNames } = this.OS.pop()!.value as ClosureValue;
+        const captureMap = new Map<string, Item>();
+        for (const name of captureNames) {
+          if (paramNames.includes(name)) {
+            continue; // Don't capture, param shadows this variable
+          }
+
+          let envItem = this.E;
+
+          let foundInHeap: boolean = false;
+          while (envItem.value !== 0xFF) {
+            const env = this.heap.get_data(envItem) as EnvironmentValue;
+            if (env.bindings.has(name)) {
+              const capturedItem = env.bindings.get(name)!;
+              if (!is_primitive(capturedItem.tag)) {
+                env.bindings.delete(name); // Move: remove from current env if variable is heap allocated
+              }
+
+              this.heap.set_data(envItem, env); // TODO: Possible Optimization: Shrink size of environment
+
+              captureMap.set(name, capturedItem);
+              foundInHeap = true;
+              break;
+            }
+            envItem = addr_to_Item(this.heap, env.parentAddr);
+          }
+
+          if (foundInHeap) continue;
+
+          // Not found in heap, check RTS but do not move values from RTS 
+          // Search top-down in RTS (treat as an environment stack)
+          let foundInRTS = false;
+          for (let i = this.RTS.length - 1; i >= 0; i--) {
+            const frame = this.RTS[i];
+            if (frame instanceof Map && frame.has(name)) {
+              const capturedItem = frame.get(name); // Do not delete from RTS, copy value
+              captureMap.set(name, capturedItem);
+              foundInRTS = true;
+              break;
+            }
+          }
+
+          // Not found in RTS or Heap, throw runtime error
+          if (!foundInRTS && !foundInHeap) {
+            // For debug purposes, should not appear in implementation since the compiler should 
+            // keep track of move semantics/ownership and unbound names/lifetimes
+            throw new Error(`Argument '${name}' to function not found in heap or RTS`);
+          }
+        }
+
+        const closure = new Item(Tag.CAPTURED_CLOSURE, 0, {
+          funcAddr,
+          captures: captureMap,
+          paramNames
+        });
+
+        this.OS.push(closure);
+        break;
+      }
+      case Bytecode.RET: {
+        const returnValue = this.OS.pop(); // Pop return value (if any)
+        const currentFrame = this.RTS.pop(); // Pop RTS frame
+        if (!currentFrame) throw new Error("Runtime stack underflow on RET");
+
+        // Restore PC and E 
+        this.PC = currentFrame.__return_pc;
+        this.E = currentFrame.__old_env;
+
+        if (returnValue !== undefined) {
+          this.OS.push(returnValue); // Push return value back on OS
+        } else {
+          this.OS.push(new Item(Tag.UNIT, 0, undefined));
+        }
+        return;
+      }
+      case Bytecode.DECL: {
+        const { name, rustLikeType } = inst.operand!;
+        if (rustLikeType.tag === Tag.CLOSURE) {
+          // If a closure is being declared, push its instruction address value to the OS as a primitive first 
+          const it = this.OS.pop()!;
+
+          if (it.tag !== Tag.NUMBER)
+            throw new Error("New function declared but no instruction access given")
+
+          const currFrame: Frame = this.RTS[this.RTS.length - 1];
+          currFrame.bindings.set(name, new Item(Tag.CLOSURE, 0, <ClosureValue>{
+            funcAddr: it.value, captureNames: rustLikeType.captureNames, paramNames: rustLikeType.paramNames
+          }));
+
+        } else {
+          const curEnv = this.heap.get_data(this.E) as EnvironmentValue;
+          curEnv.bindings.set(name, undefined);
+        }
+      }
     }
   }
 
-  /* ───────────── public API ───────────── */
-
   // Run program
-  runInstrs(instrs: Inst[], debug = true) {
-    this.isDebug = debug;
+  runInstrs(instrs: Inst[], isDebug: boolean = true): any {
+    this.isDebug = isDebug;
     this.instrs = instrs;
     return this.run();
   }
 
-  private run() {
-    /* … identical bootstrap as before … */
+  run(): any {
+    // Initialize
     this.PC = 0;
     this.heap = new Heap(2048);
     this.OS = [];
     this.RTS = [];
+    this.E = this.heap.allocEnv(32); // TODO: Base the value here off the number of variables allocated in the global environment 
 
-    /*  global env & frame identical to previous version … */
+    const global_frame: Frame = {
+      __return_pc: -1,
+      __old_env: undefined,
+      bindings: new Map<string, Item>([  // Add global frame
+        ["print!",
+          new Item(Tag.CLOSURE,
+            0,
+            <ClosureValue>{ funcAddr: 0, captureNames: ['x'], paramNames: ['x'] })], // TODO: Add primitive implementation of print! into instrs from compiler, will require new opcodes
+      ])
+    };
 
-    /* main loop */
-    while (this.instrs[this.PC].opcode !== Bytecode.DONE) {
+    this.RTS.push(global_frame);
+
+    // Main loop to step through program
+    while (this.instrs[this.PC].opcode != Bytecode.DONE) {
       this.step();
-      this.PC += 1;
+      this.PC += 1; // increment program counter
     }
 
-    const res = this.OS.pop();
-    return {
-      value: res ? JSON.stringify(res.value) : "()",
-      debugTrace: this.trace,
-    };
+    const resultItem: Item = this.OS.pop();
+
+    let result = { value: "()", debugTrace: this.trace }; // Always return a value string as a result of execution
+
+    // Always return a string as a result of execution
+    if (!resultItem) { // Nothing on heap, return unit type
+      result.value = "()"; // Return unit type
+    } else if (is_primitive(resultItem.tag)) {
+      result.value = JSON.stringify(resultItem.value);
+    } else {
+      result.value = JSON.stringify(this.heap.addr_to_JS_value(resultItem.value));
+    }
+    return result;
   }
+
 }
 
-/*  Simple wrapper object  */
 export class Inst {
-  constructor(public opcode: Bytecode, public operand?: any) {}
+  constructor(public opcode: Bytecode, public operand?: any) { }
 }
