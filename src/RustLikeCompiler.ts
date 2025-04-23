@@ -222,6 +222,7 @@ export class RustLikeCompilerVisitor
         this.instructions.push(new Inst(OP_TO_BYTE[opTxt]));
         return this.defaultResult();
       }
+      
 
       /* “>” is compiled as the reversed <  */
       if (opTxt === ">") {
