@@ -590,22 +590,20 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   visitBlock_stmt(ctx: Block_stmtContext): RustLikeType {
     try {
       console.log("Visiting block statement:", ctx.getText());
-      console.log("Statement list:", ctx.stmt_list()?.getText());
 
       // Create a new scope for the block
       const scanRes: ScanResult = new ScopedScannerVisitor(ctx).visit(ctx);
       this.typeEnv = this.typeEnv.extend(scanRes);
 
       // Visit all statements in the block
-      if (ctx.stmt_list() && ctx.stmt_list().stmt()) {
-        const stmts = ctx.stmt_list().stmt();
+      const stmtList = ctx.stmt_list();
+      if (stmtList && stmtList.stmt()) {
+        const stmts = stmtList.stmt();
         console.log("Number of statements:", stmts.length);
         for (let i = 0; i < stmts.length; i++) {
           console.log("Visiting statement:", stmts[i].getText());
           this.visit(stmts[i]);
         }
-      } else {
-        console.log("No statements found in block");
       }
 
       // Exit block scope
