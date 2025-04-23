@@ -174,10 +174,12 @@ class TypeEnvironment {
 
 export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLikeType> implements RustLikeVisitor<RustLikeType> {
   typeEnv: TypeEnvironment; // Has a parent address and a map for bindings
+  isDebug: boolean;
 
-  constructor() {
+  constructor(isDebug = true) {
     super();
     this.typeEnv = new TypeEnvironment();
+    this.isDebug = isDebug;
   }
 
   protected defaultResult(): RustLikeType {
@@ -185,6 +187,7 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   }
 
   visitProg(ctx: ProgContext): RustLikeType {
+    if (this.isDebug) throw new Error("Program getting parsed!");
     const scanRes: ScanResult = new ScopedScannerVisitor(ctx).visit(ctx);
     this.typeEnv = this.typeEnv.extend(scanRes);
 
