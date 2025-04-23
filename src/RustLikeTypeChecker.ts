@@ -4,11 +4,13 @@ import { RustLikeVisitor } from "./parser/grammar/RustLikeVisitor";
 import { Frame } from "./RustLikeVirtualMachine";
 import { BinaryOpExprContext, Block_exprContext, Block_stmtContext, Bool_exprContext, Break_stmtContext, CallExprContext, Continue_stmtContext, DeclContext, Expr_stmtContext, ExprContext, Fn_declContext, If_exprContext, If_stmtContext, IndexExprContext, LogicalExprContext, Print_stmtContext, ProgContext, RustLikeParser, Str_exprContext, TypeContext, U32_exprContext, UnaryExprContext, While_loopContext } from "./parser/grammar/RustLikeParser";
 import { types } from "util";
+import { parse } from "path";
+import { ParamContext } from "./parser/RustLikeParser";
 
 type UnitType = { tag: Tag.UNIT };
 type U32Type = { tag: Tag.NUMBER; val: number }; // Value stored for compile time checks 
 type BoolType = { tag: Tag.BOOLEAN; val: boolean };
-type StringType = { tag: Tag.STRING };
+type StringType = { tag: Tag.STRING; isMoved: boolean };
 type FnType = {
   tag: Tag.CLOSURE;
   captureNames: string[];
@@ -20,9 +22,10 @@ type FnType = {
 export type RustLikeType = UnitType | U32Type | BoolType | StringType | FnType;
 
 const UNIT_TYPE: UnitType = { tag: Tag.UNIT };
-const U32_TYPE: U32Type = { tag: Tag.NUMBER, val: 0 }; // value initialized to be 0
+const U32_TYPE: U32Type = { tag: Tag.NUMBER, val: 1 }; // value initialized to be 1
 const BOOL_TYPE: BoolType = { tag: Tag.BOOLEAN, val: false }; // value initalized to false
-const STRING_TYPE: StringType = { tag: Tag.STRING };
+const STRING_TYPE: StringType = { tag: Tag.STRING, isMoved: false };
+const MOVED_STRING_TYPE: StringType = { tag: Tag.STRING, isMoved: true };
 
 export function typeEqual(a: RustLikeType, b: RustLikeType): boolean {
   return a === b
@@ -146,6 +149,17 @@ class TypeEnvironment {
   extend(locals: ScanResult): TypeEnvironment {
     const extendedEnv: TypeEnvironment = new TypeEnvironment(locals);
     extendedEnv.parent = this;
+    if (locals !== null) {
+      for (let i = 0; i < locals.names.length; i++) {
+        if (this.types.has(locals.names[i])) {
+          if (typeEqual(locals.types[i], STRING_TYPE)) // String types are the only movable values
+            this.types.set(locals.names[i], MOVED_STRING_TYPE);
+          if (locals.types[i].tag === Tag.CLOSURE) {
+            extendedEnv.types.delete(locals.names[i]); // Closures should not be copied 
+          }
+        }
+      }
+    }
     return extendedEnv;
   }
 
@@ -356,7 +370,9 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   visitTerminal(_node: TerminalNode): RustLikeType {
     switch (_node.getSymbol().type) {
       case RustLikeParser.IDENTIFIER: {
-        return this.typeEnv.lookUpType(_node.getText()); // This may be a lookup of an already moved value!
+        const retType = this.typeEnv.lookUpType(_node.getText()); // This may be a lookup of an already moved value!
+        if (retType === MOVED_STRING_TYPE) throw new Error(`Borrow of moved String ${_node.getText()}.`);
+        return retType;
       }
       case RustLikeParser.U32: {
         return {
@@ -372,7 +388,8 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
       }
       case RustLikeParser.STRING: {
         return {
-          tag: Tag.STRING
+          tag: Tag.STRING,
+          isMoved: false
         };
       }
       default: {
@@ -389,10 +406,59 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   //
 
   visitDecl(ctx: DeclContext): RustLikeType {
+    const name = ctx.IDENTIFIER().getText();
+    const declType = parseType(ctx.type());
+    const exprType = this.visit(ctx.expr());
+    if (!typeEqual(declType, exprType))
+      throw new Error(`Expected type ${declType} in declaration for ${name}, got ${exprType}.`);
+    this.typeEnv.types.set(name, exprType);
     return UNIT_TYPE;
   }
 
   visitFn_decl(ctx: Fn_declContext): RustLikeType {
+    const name = ctx.IDENTIFIER().getText();
+    const block = ctx.block_expr() === null ? ctx.block_stmt() : ctx.block_expr();
+    let fnType: FnType;
+
+    // Get argument types
+    const paramNames = [];
+    const paramTypes = [];
+    const paramList = ctx.param_list_opt().param_list();
+    if (paramList !== null) {
+      paramList.param().forEach(
+        (param) => {
+          paramNames.push(param.IDENTIFIER().getText());
+          paramTypes.push(parseType(param.type()));
+        });
+    }
+
+    // Get capture types 
+    const scanRes: ScanResult = new ScopedScannerVisitor(block).visit(block);
+
+    // Enter scope
+    this.typeEnv = this.typeEnv.extend(scanRes);
+
+    // Check return types
+    const retType = parseType(ctx.type());
+    const bodyType: RustLikeType = this.visit(block);
+    if (!typeEqual(retType, bodyType))
+      throw new Error(`Expected return type ${retType} in function declaration for ${name}, got ${bodyType}.`);
+
+    // Exit scope
+    this.typeEnv = this.typeEnv.parent;
+
+    // Initalize fnType with values
+    fnType = {
+      tag: Tag.CLOSURE,
+      captureNames: scanRes.names,
+      captureTypes: scanRes.types,
+      paramNames: paramNames,
+      paramTypes: paramTypes,
+      retType: bodyType,
+    };
+
+    // Add declaration
+    this.typeEnv.types.set(name, fnType);
     return UNIT_TYPE;
   }
 
