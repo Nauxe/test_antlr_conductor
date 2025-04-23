@@ -1,8 +1,9 @@
 import { AbstractParseTreeVisitor, ParserRuleContext, } from "antlr4ng";
-import { EnvironmentValue, Tag } from "./Heap";
+import { EnvironmentValue, Tag, Item } from "./Heap";
 import { RustLikeVisitor } from "./parser/grammar/RustLikeVisitor";
 import { Frame } from "./RustLikeVirtualMachine";
 import { BinaryOpExprContext, Block_exprContext, Block_stmtContext, Bool_exprContext, CallExprContext, DeclContext, Fn_declContext, If_exprContext, If_stmtContext, IndexExprContext, ProgContext, Str_exprContext, TypeContext, U32_exprContext, UnaryExprContext, While_loopContext } from "./parser/grammar/RustLikeParser";
+import { types } from "util";
 
 type UnitType = { tag: Tag.UNIT };
 type U32Type = { tag: Tag.NUMBER; val: number }; // Value stored for compile time checks 
@@ -146,15 +147,52 @@ export class ScopedScannerVisitor extends AbstractParseTreeVisitor<ScanResult> i
   }
 }
 
+class TypeEnvironment {
+  parent: TypeEnvironment;
+  types: Map<string, RustLikeType> = new Map<string, RustLikeType>;
+
+  constructor(locals: ScanResult | null = null) {
+    this.parent = null;
+    if (locals !== null) {
+      for (let i = 0; i < locals.names.length; i++) {
+        this.types.set(locals.names[i], locals.types[i]);
+      }
+    }
+  }
+
+  extend(locals: ScanResult): TypeEnvironment {
+    const extendedEnv: TypeEnvironment = new TypeEnvironment(locals);
+    extendedEnv.parent = this;
+    return extendedEnv;
+  }
+
+  lookUpType(name: string): RustLikeType {
+    if (this.types.has(name)) return this.types.get(name);
+
+    let curEnv: TypeEnvironment = this;
+    while (curEnv.parent !== null) {
+      curEnv = curEnv.parent;
+      if (curEnv.types.has(name)) return curEnv.types.get(name);
+    }
+
+    throw new Error(`Unbound name: ${name}`);
+  }
+}
+
 export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLikeType> implements RustLikeVisitor<RustLikeType> {
-  typeEnv: EnvironmentValue; // Has a parent address (unused in type checker) and a map for bindings
+  typeEnv: TypeEnvironment; // Has a parent address and a map for bindings
   compileStack: Frame[]; // Has a program counter address (unused), old environment (unused), and a map for closure bindings   
 
   constructor() {
     super();
+    this.typeEnv = new TypeEnvironment();
   }
 
   visitProg(ctx: ProgContext): RustLikeType {
+    const scanRes: ScanResult = new ScopedScannerVisitor(ctx).visit(ctx);
+
+    this.typeEnv = this.typeEnv.extend(scanRes);
+
     return UNIT_TYPE; // temporary
   }
 
