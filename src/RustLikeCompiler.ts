@@ -7,7 +7,7 @@ import {
   Fn_declContext,
   Print_stmtContext,
   While_loopContext,
-  BlockContext,
+  Block_stmtContext,
   ExprContext,
   UnaryExprContext,
   BinaryOpExprContext,
@@ -23,18 +23,13 @@ import { RustLikeVisitor } from "./parser/grammar/RustLikeVisitor";
 import { Heap, Item, Tag } from "./Heap";
 import { Bytecode, Inst } from "./RustLikeVirtualMachine";
 
-/*  map every infix operator to the corresponding byte-code instruction  */
+/*  map supported infix operators to byte-code instruction  */
+// only include those the VM natively supports
 const OP_TO_BYTE: Record<string, Bytecode> = {
   "+": Bytecode.PLUS,
-  "-": Bytecode.MINUS,
   "*": Bytecode.TIMES,
-  "/": Bytecode.DIV,
-  "%": Bytecode.MOD,
   "<": Bytecode.LT,
-  "<=": Bytecode.LE,
-  ">=": Bytecode.GE,
   "==": Bytecode.EQ,
-  "!=": Bytecode.NE,
 };
 
 export class RustLikeCompilerVisitor
@@ -44,6 +39,12 @@ export class RustLikeCompilerVisitor
   private heap = new Heap(2048);
   /** final byte-code output for the VM */
   public instructions: Inst[] = [];
+
+  // counter for generating fresh temporary variable names
+  private tmpCounter = 0;
+  private freshTemp(): string {
+    return `_tmp${this.tmpCounter++}`;
+  }
 
   protected defaultResult(): Item {
     return new Item(Tag.UNIT, 0, 0);
@@ -104,13 +105,13 @@ export class RustLikeCompilerVisitor
     this.visit(ctx.expr()); // condition
     const jof = new Inst(Bytecode.JOF, 0);
     this.instructions.push(jof);
-    this.visit(ctx.block());
+    this.visit(ctx.block_stmt());
     this.instructions.push(new Inst(Bytecode.GOTO, top));
     jof.operand = this.instructions.length;
     return this.defaultResult();
   }
 
-  visitBlock(ctx: BlockContext): Item {
+  visitBlock_stmt(ctx: Block_stmtContext): Item {
     /* each statement* except the last behaves as usual */
     const stmts = ctx.stmt_list().stmt();
     stmts.slice(0, -1).forEach((s) => this.visit(s));
@@ -190,11 +191,110 @@ export class RustLikeCompilerVisitor
 
   /* arithmetic / comparison  */
   visitBinaryOpExpr(ctx: BinaryOpExprContext): Item {
-    this.visit(ctx.expr(0));
-    this.visit(ctx.expr(1));
+    const lhs = ctx.expr(0);
+    const rhs = ctx.expr(1);
+    const op = ctx.INT_OP().getText();
 
-    const op = ctx.INT_OP().getText(); // rule covers + - * / %
-    this.instructions.push(new Inst(OP_TO_BYTE[op]));
+    if (op === "-") {
+      // a - b  ⇒  a; b; -1; TIMES; PLUS
+      this.visit(lhs);
+      this.visit(rhs);
+      this.instructions.push(new Inst(Bytecode.LDCI, -1));
+      this.instructions.push(new Inst(Bytecode.TIMES));
+      this.instructions.push(new Inst(Bytecode.PLUS));
+
+    } else if (op === "/" || op === "%") {
+      // a / b or a % b ⇒ repeated subtraction loop
+      const tDivd = this.freshTemp();
+      const tDivs = this.freshTemp();
+      const tQuot = this.freshTemp();
+
+      // declare temps
+      [tDivd, tDivs, tQuot].forEach((name) =>
+        this.instructions.push(
+          new Inst(Bytecode.DECL, {
+            name,
+            rustLikeType: new Item(Tag.NUMBER, 0, 0),
+          })
+        )
+      );
+
+      // dividend = a
+      this.visit(lhs);
+      this.instructions.push(new Inst(Bytecode.ASSIGN, tDivd));
+      // divisor = b
+      this.visit(rhs);
+      this.instructions.push(new Inst(Bytecode.ASSIGN, tDivs));
+      // quotient = 0
+      this.instructions.push(new Inst(Bytecode.LDCI, 0));
+      this.instructions.push(new Inst(Bytecode.ASSIGN, tQuot));
+
+      // loop start
+      const loopStart = this.instructions.length;
+      // if dividend < divisor then exit
+      this.instructions.push(new Inst(Bytecode.LDHS, tDivd));
+      this.instructions.push(new Inst(Bytecode.LDHS, tDivs));
+      this.instructions.push(new Inst(Bytecode.LT));
+      const jof = new Inst(Bytecode.JOF, 0);
+      this.instructions.push(jof);
+
+      // body: dividend = dividend - divisor
+      this.instructions.push(new Inst(Bytecode.LDHS, tDivd));
+      this.instructions.push(new Inst(Bytecode.LDHS, tDivs));
+      this.instructions.push(new Inst(Bytecode.LDCI, -1));
+      this.instructions.push(new Inst(Bytecode.TIMES));
+      this.instructions.push(new Inst(Bytecode.PLUS));
+      this.instructions.push(new Inst(Bytecode.ASSIGN, tDivd));
+
+      // quotient = quotient + 1
+      this.instructions.push(new Inst(Bytecode.LDHS, tQuot));
+      this.instructions.push(new Inst(Bytecode.LDCI, 1));
+      this.instructions.push(new Inst(Bytecode.PLUS));
+      this.instructions.push(new Inst(Bytecode.ASSIGN, tQuot));
+
+      // goto loop start
+      this.instructions.push(new Inst(Bytecode.GOTO, loopStart));
+      // patch exit
+      jof.operand = this.instructions.length;
+
+      // leave result
+      const resultTemp = op === "/" ? tQuot : tDivd;
+      this.instructions.push(new Inst(Bytecode.LDHS, resultTemp));
+
+    } else if (op === ">") {
+      // a > b ⇒ b < a
+      this.visit(rhs);
+      this.visit(lhs);
+      this.instructions.push(new Inst(Bytecode.LT));
+
+    } else if (op === "<=") {
+      // a <= b ⇒ !(b < a)
+      this.visit(rhs);
+      this.visit(lhs);
+      this.instructions.push(new Inst(Bytecode.LT));
+      this.instructions.push(new Inst(Bytecode.NOT));
+
+    } else if (op === ">=") {
+      // a >= b ⇒ !(a < b)
+      this.visit(lhs);
+      this.visit(rhs);
+      this.instructions.push(new Inst(Bytecode.LT));
+      this.instructions.push(new Inst(Bytecode.NOT));
+
+    } else if (op === "!=") {
+      // a != b ⇒ !(a == b)
+      this.visit(lhs);
+      this.visit(rhs);
+      this.instructions.push(new Inst(Bytecode.EQ));
+      this.instructions.push(new Inst(Bytecode.NOT));
+
+    } else {
+      // fallback for +, *, <, ==
+      this.visit(lhs);
+      this.visit(rhs);
+      this.instructions.push(new Inst(OP_TO_BYTE[op]));
+    }
+
     return this.defaultResult();
   }
 
@@ -209,7 +309,7 @@ export class RustLikeCompilerVisitor
   }
 
   /*  catch-all infix expression that the grammar
-      may generate for comparisons and remaining ops       */
+      may generate for any other constructs       */
   visitExpr(ctx: ExprContext): Item {
     if (ctx.getChildCount() === 3) {
       const lhs = ctx.getChild(0) as ExprContext;
@@ -222,15 +322,8 @@ export class RustLikeCompilerVisitor
         this.instructions.push(new Inst(OP_TO_BYTE[opTxt]));
         return this.defaultResult();
       }
-      
 
-      /* “>” is compiled as the reversed <  */
-      if (opTxt === ">") {
-        this.visit(rhs);
-        this.visit(lhs);
-        this.instructions.push(new Inst(Bytecode.LT));
-        return this.defaultResult();
-      }
+      // all other binary ops handled above in visitBinaryOpExpr
     }
     return this.visitChildren(ctx);
   }
