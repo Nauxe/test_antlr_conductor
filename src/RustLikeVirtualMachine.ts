@@ -233,7 +233,18 @@ export class RustLikeVirtualMachine {
             throw new Error("Stack underflow: Cannot call with empty stack");
           }
 
-          const fnItem = this.OS[this.OS.length - 1];
+          // Get the function and argument count
+          const numArgs = inst.operand as number;
+          
+          // Check if enough values on stack
+          if (this.OS.length < numArgs + 1) {
+            throw new Error(`Not enough values on stack for function call with ${numArgs} arguments`);
+          }
+          
+          // Get the function at the appropriate position (after args)
+          const fnIndex = this.OS.length - numArgs - 1;
+          const fnItem = this.OS[fnIndex];
+          
           if (!fnItem || (fnItem.tag !== Tag.CLOSURE && fnItem.tag !== Tag.CAPTURED_CLOSURE)) {
             throw new Error(`Cannot call non-function value: ${fnItem ? Tag[fnItem.tag] : 'undefined'}`);
           }
@@ -256,20 +267,22 @@ export class RustLikeVirtualMachine {
           }
 
           const numParams = paramNames.length;
-          if (this.OS.length < numParams + 1) {
-            throw new Error(`Not enough arguments for function call: expected ${numParams}, got ${this.OS.length - 1}`);
+          if (numParams !== numArgs) {
+            throw new Error(`Function expected ${numParams} arguments but got ${numArgs}`);
           }
 
           // Save current environment and PC
           const returnPC = this.PC + 1; // Save the next instruction after the call
           const oldEnv = this.E;
 
-          // Pop arguments and the function
+          // Pop arguments
           const args: Item[] = [];
-          for (let i = 0; i < numParams; i++) {
+          for (let i = 0; i < numArgs; i++) {
             args.unshift(this.OS.pop()!); // Get in reverse order
           }
-          this.OS.pop(); // Remove function
+          
+          // Pop the function
+          this.OS.splice(fnIndex, 1);
 
           // Create new frame for return
           const frame: Frame = {

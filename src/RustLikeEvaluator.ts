@@ -79,21 +79,29 @@ export class RustLikeEvaluator extends BasicEvaluator {
     // Run instructions on the virtual machine
     let result: { value: string, debugTrace: string };
     const debugTrace = { trc: "" };
+    
     try {
       if (this.compilerVisitor.instructions.length === 0) {
         throw new Error("No instructions to execute");
       }
+      
+      // Print information about the number of instructions being executed
+      if (this.isDebug) {
+        this.conductor.sendOutput(`Executing ${this.compilerVisitor.instructions.length} instructions\n`);
+      }
+      
       result = this.VM.runInstrs(this.compilerVisitor.instructions, this.isDebug, debugTrace);
 
-      if (this.isDebug)
+      if (this.isDebug) {
         this.conductor.sendOutput(`DEBUG:\n${result.debugTrace}\n\n -------------------------- \n`);
+      }
 
       // Send the result to the REPL
       this.conductor.sendOutput(`Result of expression: ${result.value}`);
     } catch (error) {
-
-      if (this.isDebug)
+      if (this.isDebug) {
         this.conductor.sendOutput(`DEBUG:\n${debugTrace.trc}\n\n -------------------------- \n`);
+      }
 
       // Handle errors and send them to the REPL
       this.conductor.sendOutput(`Runtime error: ${error instanceof Error ? error.message : String(error)}`);

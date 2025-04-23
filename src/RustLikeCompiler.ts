@@ -65,23 +65,33 @@ export class RustLikeCompilerVisitor
     const scanResult = scanner.visit(ctx);
 
     // Process all declarations first
-    if (ctx.stmt_list()) {
-      const stmts = ctx.stmt_list().stmt();
-      for (let i = 0; i < stmts.length; i++) {
-        if (stmts[i] && (stmts[i].fn_decl() || stmts[i].decl())) {
-          this.visit(stmts[i]);
+    if (ctx.block_expr()) {
+      const blockExpr = ctx.block_expr();
+      if (blockExpr.stmt_list() && blockExpr.stmt_list().stmt()) {
+        const stmts = blockExpr.stmt_list().stmt();
+        for (let i = 0; i < stmts.length; i++) {
+          if (stmts[i] && (stmts[i].fn_decl() || stmts[i].decl())) {
+            this.visit(stmts[i]);
+          }
+        }
+      }
+    } else if (ctx.block_stmt()) {
+      const blockStmt = ctx.block_stmt();
+      if (blockStmt.stmt_list() && blockStmt.stmt_list().stmt()) {
+        const stmts = blockStmt.stmt_list().stmt();
+        for (let i = 0; i < stmts.length; i++) {
+          if (stmts[i] && (stmts[i].fn_decl() || stmts[i].decl())) {
+            this.visit(stmts[i]);
+          }
         }
       }
     }
 
     // Then process all statements
-    if (ctx.stmt_list()) {
-      const stmts = ctx.stmt_list().stmt();
-      for (let i = 0; i < stmts.length; i++) {
-        if (stmts[i] && !(stmts[i].fn_decl() || stmts[i].decl())) {
-          this.visit(stmts[i]);
-        }
-      }
+    if (ctx.block_expr()) {
+      this.visit(ctx.block_expr());
+    } else if (ctx.block_stmt()) {
+      this.visit(ctx.block_stmt());
     }
 
     // Add DONE instruction
@@ -265,6 +275,9 @@ export class RustLikeCompilerVisitor
   }
 
   visitBlock_stmt(ctx: Block_stmtContext): Item {
+    // Enter block scope
+    this.instructions.push(new Inst(Bytecode.ENTER_SCOPE, 0));
+
     // Visit all statements in the block
     if (ctx.stmt_list() && ctx.stmt_list().stmt()) {
       const stmts = ctx.stmt_list().stmt();
@@ -272,6 +285,9 @@ export class RustLikeCompilerVisitor
         if (stmts[i]) this.visit(stmts[i]);
       }
     }
+
+    // Exit block scope
+    this.instructions.push(new Inst(Bytecode.EXIT_SCOPE));
 
     // Return unit type for block statements
     return this.defaultResult();
@@ -563,8 +579,13 @@ export class RustLikeCompilerVisitor
 
   visitCallExpr(ctx: CallExprContext): Item {
     try {
-      // Visit the function expression (an identifier that refers to a function)
+      // Visit the function expression first
       this.visit(ctx.expr());
+
+      // Count arguments
+      const numArgs = ctx.arg_list_opt() && ctx.arg_list_opt().expr() 
+        ? ctx.arg_list_opt().expr().length 
+        : 0;
 
       // Visit all arguments
       if (ctx.arg_list_opt() && ctx.arg_list_opt().expr()) {
@@ -575,10 +596,9 @@ export class RustLikeCompilerVisitor
       }
 
       // Call the function with the number of arguments
-      const numArgs = ctx.arg_list_opt() ? ctx.arg_list_opt().expr().length : 0;
       this.instructions.push(new Inst(Bytecode.CALL, numArgs));
 
-      // The result of the function call is now on the stack and available for the caller
+      // The result of the function call will be left on the stack by the VM
       return this.defaultResult();
     } catch (error) {
       console.error("Error in function call:", error);
