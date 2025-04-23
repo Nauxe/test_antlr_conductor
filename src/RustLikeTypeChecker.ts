@@ -502,7 +502,7 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   }
 
   visitExpr_stmt(ctx: Expr_stmtContext): RustLikeType {
-    // TODO: Not implemented
+    this.visit(ctx.expr());
     return UNIT_TYPE;
   }
 
@@ -511,6 +511,4 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
     return UNIT_TYPE;
   }
 }
-
-
 
