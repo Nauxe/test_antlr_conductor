@@ -1,7 +1,7 @@
 import { AbstractParseTreeVisitor, ParserRuleContext, ParseTree, TerminalNode } from "antlr4ng";
 import { Tag } from "./Heap";
 import { RustLikeVisitor } from "./parser/grammar/RustLikeVisitor";
-import { BinaryOpExprContext, Block_exprContext, Block_stmtContext, Bool_exprContext, CallExprContext, Continue_stmtContext, DeclContext, Expr_stmtContext, ExprContext, Fn_declContext, If_exprContext, If_stmtContext, IndexExprContext, LogicalExprContext, Print_stmtContext, ProgContext, RustLikeParser, Str_exprContext, TypeContext, U32_exprContext, UnaryExprContext, While_loopContext } from "./parser/grammar/RustLikeParser";
+import { BinaryOpExprContext, Block_exprContext, Block_stmtContext, Bool_exprContext, CallExprContext, Continue_stmtContext, DeclContext, Expr_stmtContext, ExprContext, Fn_declContext, If_exprContext, If_stmtContext, IndexExprContext, LogicalExprContext, Print_stmtContext, ProgContext, RustLikeParser, Str_exprContext, TypeContext, U32_exprContext, UnaryExprContext, While_loopContext, Stmt_listContext } from "./parser/grammar/RustLikeParser";
 
 type UnitType = { tag: Tag.UNIT };
 type U32Type = { tag: Tag.NUMBER; val: number }; // Value stored for compile time checks 
@@ -187,7 +187,6 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   }
 
   visitProg(ctx: ProgContext): RustLikeType {
-    if (this.isDebug) throw new Error("Program getting parsed!");
     const scanRes: ScanResult = new ScopedScannerVisitor(ctx).visit(ctx);
     this.typeEnv = this.typeEnv.extend(scanRes);
 
@@ -195,6 +194,11 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
     if (!typeEqual(resType, UNIT_TYPE))
       throw new Error("Program returned non-unit type");
     return UNIT_TYPE; // All programs are statement lists, and statements all return Unit type 
+  }
+
+  visitStmt_list(ctx: Stmt_listContext): RustLikeType {
+    ctx.stmt().forEach((s) => this.visit(s));
+    return UNIT_TYPE;
   }
 
   //
