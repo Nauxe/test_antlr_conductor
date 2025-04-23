@@ -216,7 +216,7 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
     const scanResult = scanner.visit(ctx);
     this.typeEnv = new TypeEnvironment(scanResult);
 
-    // Then visit the statements
+    // Visit the block statement or block expression
     if (ctx.block_expr()) {
       return this.visit(ctx.block_expr());
     } else if (ctx.block_stmt()) {
@@ -591,19 +591,14 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
 
   visitBlock_stmt(ctx: Block_stmtContext): RustLikeType {
     try {
-      console.log("Visiting block statement:", ctx.getText());
-
       // Create a new scope for the block
       const scanRes: ScanResult = new ScopedScannerVisitor(ctx).visit(ctx);
       this.typeEnv = this.typeEnv.extend(scanRes);
 
       // Visit all statements in the block
-      const stmtList = ctx.stmt_list();
-      if (stmtList && stmtList.stmt()) {
-        const stmts = stmtList.stmt();
-        console.log("Number of statements:", stmts.length);
+      if (ctx.stmt_list() && ctx.stmt_list().stmt()) {
+        const stmts = ctx.stmt_list().stmt();
         for (let i = 0; i < stmts.length; i++) {
-          console.log("Visiting statement:", stmts[i].getText());
           this.visit(stmts[i]);
         }
       }

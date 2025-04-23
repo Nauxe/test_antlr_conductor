@@ -274,8 +274,13 @@ export class RustLikeCompilerVisitor
   }
 
   visitBlock_stmt(ctx: Block_stmtContext): Item {
-    // Visit all statements
-    ctx.stmt_list().stmt().forEach((stmt) => this.visit(stmt));
+    // Visit all statements in the block
+    if (ctx.stmt_list() && ctx.stmt_list().stmt()) {
+      const stmts = ctx.stmt_list().stmt();
+      for (let i = 0; i < stmts.length; i++) {
+        if (stmts[i]) this.visit(stmts[i]);
+      }
+    }
 
     // Return unit type for block statements
     return this.defaultResult();
