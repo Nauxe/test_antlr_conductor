@@ -37,7 +37,7 @@ export function typeEqual(a: RustLikeType, b: RustLikeType): boolean {
         : true; // Should not reach here, but if it does it is a type where a.tag === b.tag
 }
 
-type ScanResult = { names: string[]; types: RustLikeType[] };
+export type ScanResult = { names: string[]; types: RustLikeType[] };
 
 export class ScopedScannerVisitor extends AbstractParseTreeVisitor<ScanResult> implements RustLikeVisitor<ScanResult> {
   scanContext: ParserRuleContext;
