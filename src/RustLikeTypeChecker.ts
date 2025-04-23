@@ -214,9 +214,6 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
       let result: RustLikeType;
       if (ctx.block_stmt() !== null) {
         result = this.visit(ctx.block_stmt());
-        if (!typeEqual(result, UNIT_TYPE)) {
-          throw new Error("Program with block statement must return unit type");
-        }
       } else if (ctx.block_expr() !== null) {
         result = this.visit(ctx.block_expr());
       } else {
@@ -589,11 +586,26 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   }
 
   visitBlock_stmt(ctx: Block_stmtContext): RustLikeType {
-    const scanRes: ScanResult = new ScopedScannerVisitor(ctx).visit(ctx);
-    this.typeEnv = this.typeEnv.extend(scanRes);
-    this.visit(ctx.stmt_list());
-    this.typeEnv = this.typeEnv.parent;
-    return UNIT_TYPE;
+    try {
+      // Create a new scope for the block
+      const scanRes: ScanResult = new ScopedScannerVisitor(ctx).visit(ctx);
+      this.typeEnv = this.typeEnv.extend(scanRes);
+
+      // Visit all statements in the block
+      if (ctx.stmt_list() && ctx.stmt_list().stmt()) {
+        const stmts = ctx.stmt_list().stmt();
+        for (let i = 0; i < stmts.length; i++) {
+          this.visit(stmts[i]);
+        }
+      }
+
+      // Exit block scope
+      this.typeEnv = this.typeEnv.parent;
+      return UNIT_TYPE;
+    } catch (error) {
+      console.error("Error in block statement:", error);
+      throw error;
+    }
   }
 }
 
