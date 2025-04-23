@@ -40,6 +40,27 @@ export function typeEqual(a: RustLikeType, b: RustLikeType): boolean {
 
 export type ScanResult = { names: string[]; types: RustLikeType[] };
 
+export function parseType(ctx: TypeContext): RustLikeType {
+  if (ctx.getText() === '()') {
+    return UNIT_TYPE;
+  } else if (ctx.getText() === 'u32') {
+    return U32_TYPE;
+  } else if (ctx.getText() === 'bool') {
+    return BOOL_TYPE;
+  } else if (ctx.getText() === 'string') {
+    return STRING_TYPE;
+  } else { // Can only be a function type here
+    return {
+      tag: Tag.CLOSURE,
+      captureNames: [], // Dummy value 
+      captureTypes: [], // Dummy value 
+      paramNames: [], // Dummy value 
+      paramTypes: ctx.type_list_opt().type_().map(t => parseType(t)),
+      retType: this.parseType(ctx.type()),
+    }
+  }
+}
+
 // A new ScopedScannerVisitor needs to be created for every scope to scan its declareds
 export class ScopedScannerVisitor extends AbstractParseTreeVisitor<ScanResult> implements RustLikeVisitor<ScanResult> {
   scanContext: ParserRuleContext;
@@ -48,26 +69,6 @@ export class ScopedScannerVisitor extends AbstractParseTreeVisitor<ScanResult> i
     this.scanContext = ctx;
   }
 
-  private parseType(ctx: TypeContext): RustLikeType {
-    if (ctx.getText() === '()') {
-      return UNIT_TYPE;
-    } else if (ctx.getText() === 'u32') {
-      return U32_TYPE;
-    } else if (ctx.getText() === 'bool') {
-      return BOOL_TYPE;
-    } else if (ctx.getText() === 'string') {
-      return STRING_TYPE;
-    } else { // Can only be a function type here
-      return {
-        tag: Tag.CLOSURE,
-        captureNames: [], // Dummy value 
-        captureTypes: [], // Dummy value 
-        paramNames: [], // Dummy value 
-        paramTypes: ctx.type_list_opt().type_().map(t => this.parseType(t)),
-        retType: this.parseType(ctx.type()),
-      }
-    }
-  }
 
   protected defaultResult(): ScanResult {
     return { names: [], types: [] }; // Return empty scan results
@@ -82,13 +83,13 @@ export class ScopedScannerVisitor extends AbstractParseTreeVisitor<ScanResult> i
 
   visitFn_decl(ctx: Fn_declContext): ScanResult {
     const fnName = ctx.IDENTIFIER().getText();
-    const fnRetType = this.parseType(ctx.type());
+    const fnRetType = parseType(ctx.type());
     let paramNames = [];
     let paramTypes = [];
     if (ctx.param_list_opt().param_list() !== null) {
       ctx.param_list_opt().param_list().param().forEach((param) => {
         paramNames.push(param.IDENTIFIER().getText());
-        paramTypes.push(this.parseType(param.type()));
+        paramTypes.push(parseType(param.type()));
       });
     }
 
@@ -121,7 +122,7 @@ export class ScopedScannerVisitor extends AbstractParseTreeVisitor<ScanResult> i
 
   visitDecl(ctx: DeclContext): ScanResult {
     const name = ctx.IDENTIFIER().getText();
-    const type = this.parseType(ctx.type());
+    const type = parseType(ctx.type());
     return {
       names: [name],
       types: [type]
@@ -148,7 +149,7 @@ class TypeEnvironment {
     return extendedEnv;
   }
 
-  lookUpType(name: string): RustLikeType {
+  lookUpType(name: string): RustLikeType {  // This may be a lookup of an already moved value!
     if (this.types.has(name)) return this.types.get(name);
 
     let curEnv: TypeEnvironment = this;
@@ -324,7 +325,6 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
     }
   }
 
-
   visitCallExpr(ctx: CallExprContext): RustLikeType {
     const fnName: string = ctx.expr().getText();
     const idType: RustLikeType = this.typeEnv.lookUpType(fnName);
@@ -356,7 +356,7 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   visitTerminal(_node: TerminalNode): RustLikeType {
     switch (_node.getSymbol().type) {
       case RustLikeParser.IDENTIFIER: {
-        return this.typeEnv.lookUpType(_node.getText());
+        return this.typeEnv.lookUpType(_node.getText()); // This may be a lookup of an already moved value!
       }
       case RustLikeParser.U32: {
         return {
@@ -389,6 +389,7 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   //
 
   visitDecl(ctx: DeclContext): RustLikeType {
+    this.parseType()
     return UNIT_TYPE;
   }
 
