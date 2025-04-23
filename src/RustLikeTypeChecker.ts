@@ -73,8 +73,8 @@ export function parseType(ctx: TypeContext): RustLikeType {
       captureNames: [], // Dummy value 
       captureTypes: [], // Dummy value 
       paramNames: [], // Dummy value 
-      paramTypes: ctx.type_list_opt().type_().map(t => parseType(t)),
-      retType: this.parseType(ctx.type()),
+      paramTypes: ctx.type_list_opt() ? ctx.type_list_opt().type_().map(t => parseType(t)) : [],
+      retType: parseType(ctx.type()),
     }
   }
 }
