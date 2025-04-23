@@ -103,12 +103,12 @@ export class RustLikeCompilerVisitor
         throw new Error(`Function ${fnName} must have a return type`);
       }
 
-      // Explicitly check that the function has a body according to the grammar
-      if (!ctx.block_expr()) {
+      // Check that the function has a body according to the grammar
+      const blockExpr = ctx.block_expr();
+      const blockStmt = ctx.block_stmt();
+      if (!blockExpr && !blockStmt) {
         throw new Error(`Function ${fnName} must have a body`);
       }
-
-      const block = ctx.block_expr();
 
       // Get parameter names and types
       const paramNames: string[] = [];
@@ -133,7 +133,9 @@ export class RustLikeCompilerVisitor
       }
 
       // Scan the function body to get captured variables
-      const scanRes = new ScopedScannerVisitor(block).visit(block);
+      const scanRes = blockExpr 
+        ? new ScopedScannerVisitor(blockExpr).visit(blockExpr)
+        : new ScopedScannerVisitor(blockStmt).visit(blockStmt);
 
       // Create closure type
       const closureType = new Item(Tag.CLOSURE, 0, {
@@ -170,19 +172,32 @@ export class RustLikeCompilerVisitor
         );
       }
 
-      // Compile function body - check if block has statements
-      if (block.stmt_list() && block.stmt_list().stmt()) {
-        const stmts = block.stmt_list().stmt();
-        for (let i = 0; i < stmts.length; i++) {
-          if (stmts[i]) this.visit(stmts[i]);
+      // Compile function body
+      if (blockExpr) {
+        // For block_expr, compile statements and final expression
+        if (blockExpr.stmt_list() && blockExpr.stmt_list().stmt()) {
+          const stmts = blockExpr.stmt_list().stmt();
+          for (let i = 0; i < stmts.length; i++) {
+            if (stmts[i]) this.visit(stmts[i]);
+          }
         }
-      }
 
-      // Compile the expression at the end of the block
-      if (block.expr()) {
-        this.visit(block.expr());
-      } else {
-        // If no expression, add a unit value
+        // Compile the expression at the end of the block
+        if (blockExpr.expr()) {
+          this.visit(blockExpr.expr());
+        } else {
+          // If no expression, add a unit value
+          this.instructions.push(new Inst(Bytecode.LDCI, 0)); // UNIT value
+        }
+      } else if (blockStmt) {
+        // For block_stmt, compile statements and add unit return value
+        if (blockStmt.stmt_list() && blockStmt.stmt_list().stmt()) {
+          const stmts = blockStmt.stmt_list().stmt();
+          for (let i = 0; i < stmts.length; i++) {
+            if (stmts[i]) this.visit(stmts[i]);
+          }
+        }
+        // Add unit return value for block_stmt
         this.instructions.push(new Inst(Bytecode.LDCI, 0)); // UNIT value
       }
 
