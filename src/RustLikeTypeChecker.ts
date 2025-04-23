@@ -142,7 +142,7 @@ class TypeEnvironment {
     }
   }
 
-  extend(locals: ScanResult): TypeEnvironment {
+  extend(locals: ScanResult = null): TypeEnvironment {
     const extendedEnv: TypeEnvironment = new TypeEnvironment(locals);
     extendedEnv.parent = this;
     if (locals !== null) {
@@ -223,7 +223,9 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   }
 
   visitBlock_expr(ctx: Block_exprContext): RustLikeType {
+    this.typeEnv = this.typeEnv.extend(null);
     this.visit(ctx.stmt_list());
+    this.typeEnv = this.typeEnv.parent;
     return this.visit(ctx.expr());
   }
 
@@ -507,7 +509,9 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   }
 
   visitBlock_stmt(ctx: Block_stmtContext): RustLikeType {
+    this.typeEnv = this.typeEnv.extend(null);
     this.visit(ctx.stmt_list());
+    this.typeEnv = this.typeEnv.parent;
     return UNIT_TYPE;
   }
 }
