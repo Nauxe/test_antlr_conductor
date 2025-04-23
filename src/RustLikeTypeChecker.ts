@@ -1,8 +1,8 @@
-import { AbstractParseTreeVisitor, ParserRuleContext, } from "antlr4ng";
-import { EnvironmentValue, Tag, Item } from "./Heap";
+import { AbstractParseTreeVisitor, ParserRuleContext, ParseTree, TerminalNode } from "antlr4ng";
+import { Tag } from "./Heap";
 import { RustLikeVisitor } from "./parser/grammar/RustLikeVisitor";
 import { Frame } from "./RustLikeVirtualMachine";
-import { BinaryOpExprContext, Block_exprContext, Block_stmtContext, Bool_exprContext, CallExprContext, DeclContext, Fn_declContext, If_exprContext, If_stmtContext, IndexExprContext, ProgContext, Str_exprContext, TypeContext, U32_exprContext, UnaryExprContext, While_loopContext } from "./parser/grammar/RustLikeParser";
+import { BinaryOpExprContext, Block_exprContext, Block_stmtContext, Bool_exprContext, Break_stmtContext, CallExprContext, Continue_stmtContext, DeclContext, Expr_stmtContext, Fn_declContext, If_exprContext, If_stmtContext, IndexExprContext, Print_stmtContext, ProgContext, Str_exprContext, TypeContext, U32_exprContext, UnaryExprContext, While_loopContext } from "./parser/grammar/RustLikeParser";
 import { types } from "util";
 
 type UnitType = { tag: Tag.UNIT };
@@ -170,13 +170,21 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
     this.typeEnv = new TypeEnvironment();
   }
 
+  protected defaultResult(): RustLikeType {
+    return UNIT_TYPE;
+  }
+
   visitProg(ctx: ProgContext): RustLikeType {
     const scanRes: ScanResult = new ScopedScannerVisitor(ctx).visit(ctx);
-
     this.typeEnv = this.typeEnv.extend(scanRes);
 
-    return UNIT_TYPE; // temporary
+    const resType: RustLikeType = this.visitChildren(ctx);
+    return UNIT_TYPE; // All programs are statement lists, and statements all return Unit type 
   }
+
+  //
+  // Visit expressions
+  //
 
   visitIf_expr(ctx: If_exprContext): RustLikeType {
     return UNIT_TYPE; // temporary
@@ -214,6 +222,11 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
     return UNIT_TYPE; // temporary
   }
 
+  //
+  // Visit statements
+  // All statements should return UNIT TYPE
+  //
+
   visitDecl(ctx: DeclContext): RustLikeType {
     return UNIT_TYPE; // Temp
   }
@@ -222,6 +235,29 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
     return UNIT_TYPE; // temporary
   }
 
+  visitPrint_stmt(ctx: Print_stmtContext): RustLikeType {
+    return UNIT_TYPE;
+  }
+
+  visitIf_stmt(ctx: If_stmtContext): RustLikeType {
+    return UNIT_TYPE;
+  }
+
+  visitWhile_loop(ctx: While_loopContext): RustLikeType {
+    return UNIT_TYPE;
+  }
+
+  visitContinue_stmt(ctx: Continue_stmtContext): RustLikeType {
+    return UNIT_TYPE;
+  }
+
+  visitExpr_stmt(ctx: Expr_stmtContext): RustLikeType {
+    return UNIT_TYPE;
+  }
+
+  visitBlock_stmt(ctx: Block_stmtContext): RustLikeType {
+    return UNIT_TYPE;
+  }
 }
 
 
