@@ -63,15 +63,13 @@ export class RustLikeCompilerVisitor
   visitProg(ctx: ProgContext): Item {
     // First scan declarations to build the type environment
     new ScopedScannerVisitor(ctx).visit(ctx);
-    // Compile the program body: either block expression or block statement
-    const be = ctx.block_expr();
-    if (be) {
-      this.visit(be);
-    } else {
-      const bs = ctx.block_stmt();
-      if (bs) {
-        this.visit(bs);
-      }
+    // Visit program body: prefer statement list, then block expression, then block statement
+    if (typeof (ctx as any).stmt_list === 'function') {
+      this.visit((ctx as any).stmt_list() as Stmt_listContext);
+    } else if (ctx.block_expr()) {
+      this.visit(ctx.block_expr()!);
+    } else if (ctx.block_stmt()) {
+      this.visit(ctx.block_stmt()!);
     }
     // Emit DONE instruction to finish
     this.instructions.push(new Inst(Bytecode.DONE));
