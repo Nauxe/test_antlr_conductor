@@ -51,7 +51,7 @@ expr_stmt       : expr ';' ;
 
 // ─── Control flow ────────────────────────────────────────────────────────────
 if_stmt     : 'if' expr block_stmt ('else' block_stmt)? ;
-while_loop  : 'while' expr block_stmt ; // While loops are not value producint
+while_loop  : 'while' expr block_stmt ; // While loops are not value producing
 
 // ─── Blocks ─────────────────────────────────────────────────────────────────
 block_stmt
