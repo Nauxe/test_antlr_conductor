@@ -211,29 +211,18 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   }
 
   visitProg(ctx: ProgContext): RustLikeType {
-    try {
-      console.log("Visiting program:", ctx.getText());
+    // First scan all declarations to build the type environment
+    const scanner = new ScopedScannerVisitor(ctx);
+    const scanResult = scanner.visit(ctx);
+    this.typeEnv = new TypeEnvironment(scanResult);
 
-      // Create a new scope for the program
-      const scanRes: ScanResult = new ScopedScannerVisitor(ctx).visit(ctx);
-      this.typeEnv = this.typeEnv.extend(scanRes);
-
-      let result: RustLikeType;
-      if (ctx.block_stmt() !== null) {
-        result = this.visit(ctx.block_stmt());
-      } else if (ctx.block_expr() !== null) {
-        result = this.visit(ctx.block_expr());
-      } else {
-        throw new Error("Program must have either a block statement or block expression");
-      }
-
-      // Exit program scope
-      this.typeEnv = this.typeEnv.parent;
-      return result;
-    } catch (error) {
-      console.error("Error in program:", error);
-      throw error;
+    // Then visit the statements
+    if (ctx.block_expr()) {
+      return this.visit(ctx.block_expr());
+    } else if (ctx.block_stmt()) {
+      return this.visit(ctx.block_stmt());
     }
+    return UNIT_TYPE;
   }
 
   visitStmt_list(ctx: Stmt_listContext): RustLikeType {

@@ -60,7 +60,40 @@ export class RustLikeCompilerVisitor
   /* ─────────── Top-level ─────────── */
 
   visitProg(ctx: ProgContext): Item {
-    this.visit(ctx.block_expr() !== null ? ctx.block_expr() : ctx.block_stmt());
+    // First scan all declarations to build the type environment
+    const scanner = new ScopedScannerVisitor(ctx);
+    const scanResult = scanner.visit(ctx);
+
+    // Process all declarations first
+    if (ctx.block_expr()) {
+      const blockExpr = ctx.block_expr();
+      if (blockExpr.stmt_list() && blockExpr.stmt_list().stmt()) {
+        const stmts = blockExpr.stmt_list().stmt();
+        for (let i = 0; i < stmts.length; i++) {
+          if (stmts[i] && (stmts[i].fn_decl() || stmts[i].decl())) {
+            this.visit(stmts[i]);
+          }
+        }
+      }
+    } else if (ctx.block_stmt()) {
+      const blockStmt = ctx.block_stmt();
+      if (blockStmt.stmt_list() && blockStmt.stmt_list().stmt()) {
+        const stmts = blockStmt.stmt_list().stmt();
+        for (let i = 0; i < stmts.length; i++) {
+          if (stmts[i] && (stmts[i].fn_decl() || stmts[i].decl())) {
+            this.visit(stmts[i]);
+          }
+        }
+      }
+    }
+
+    // Then process all statements
+    if (ctx.block_expr()) {
+      this.visit(ctx.block_expr());
+    } else if (ctx.block_stmt()) {
+      this.visit(ctx.block_stmt());
+    }
+
     this.instructions.push(new Inst(Bytecode.DONE));
     return this.defaultResult();
   }
