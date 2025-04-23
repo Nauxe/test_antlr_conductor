@@ -3,6 +3,7 @@ import { AbstractParseTreeVisitor } from "antlr4ng";
 import {
   ProgContext,
   Stmt_listContext,
+  StmtContext,
   DeclContext,
   Fn_declContext,
   Print_stmtContext,
@@ -66,7 +67,7 @@ export class RustLikeCompilerVisitor
     const scanner = new ScopedScannerVisitor(ctx);
     const scanResult = scanner.visit(ctx);
 
-    // Process function declarations first
+    // Extract all statements from the block
     let stmts;
     if (ctx.block_expr()) {
       console.log("Program contains a block expression");
@@ -76,7 +77,7 @@ export class RustLikeCompilerVisitor
         console.log("Statement types:", stmts.map(s => 
           s.fn_decl() ? "fn_decl" : 
           s.decl() ? "decl" : 
-          s.expr_stmt() ? "expr_stmt" : 
+          s.expr_stmt() ? `expr_stmt(${s.expr_stmt()?.expr().getText()})` : 
           "other_stmt"
         ));
       }
@@ -88,33 +89,43 @@ export class RustLikeCompilerVisitor
         console.log("Statement types:", stmts.map(s => 
           s.fn_decl() ? "fn_decl" : 
           s.decl() ? "decl" : 
-          s.expr_stmt() ? "expr_stmt" : 
+          s.expr_stmt() ? `expr_stmt(${s.expr_stmt()?.expr().getText()})` : 
           "other_stmt"
         ));
       }
     }
 
-    // Process all function declarations first
+    // Process all function and variable declarations first
+    const processedDecls = new Set<number>();
     if (stmts) {
       for (let i = 0; i < stmts.length; i++) {
         if (stmts[i] && (stmts[i].fn_decl() || stmts[i].decl())) {
           console.log("Pre-processing declaration:", i);
           this.visit(stmts[i]);
+          processedDecls.add(i);
           console.log("Instructions after declaration:", this.instructions.length);
         }
       }
     }
 
-    // Then process the block itself
-    console.log("Processing entire block");
-    if (ctx.block_expr()) {
-      this.visit(ctx.block_expr());
-    } else if (ctx.block_stmt()) {
-      this.visit(ctx.block_stmt());
-    } else {
-      throw new Error("Program must contain either a block expression or a block statement");
+    // Process all non-declaration statements
+    if (stmts) {
+      console.log("Processing non-declaration statements directly");
+      for (let i = 0; i < stmts.length; i++) {
+        if (!processedDecls.has(i)) {
+          console.log(`Processing statement ${i} (non-declaration):`);
+          this.visit(stmts[i]);
+          console.log(`Instructions after statement ${i}:`, this.instructions.length);
+        }
+      }
     }
-    console.log("Instructions after block:", this.instructions.length);
+
+    // Handle final expression if there's a block_expr
+    if (ctx.block_expr() && ctx.block_expr().expr()) {
+      console.log("Processing final expression in program:", ctx.block_expr().expr().getText());
+      this.visit(ctx.block_expr().expr());
+      console.log("Instructions after final expression:", this.instructions.length);
+    }
 
     // Add DONE instruction
     this.instructions.push(new Inst(Bytecode.DONE));
@@ -147,6 +158,49 @@ export class RustLikeCompilerVisitor
     }
     
     return this.defaultResult();
+  }
+
+  visitStmt(ctx: StmtContext): Item {
+    console.log("Visiting statement");
+    
+    if (ctx.decl()) {
+      console.log("Found declaration");
+      return this.visit(ctx.decl());
+    }
+    
+    if (ctx.fn_decl()) {
+      console.log("Found function declaration");
+      return this.visit(ctx.fn_decl());
+    }
+    
+    if (ctx.print_stmt()) {
+      console.log("Found print statement");
+      return this.visit(ctx.print_stmt());
+    }
+    
+    if (ctx.if_stmt()) {
+      console.log("Found if statement");
+      return this.visit(ctx.if_stmt());
+    }
+    
+    if (ctx.while_loop()) {
+      console.log("Found while loop");
+      return this.visit(ctx.while_loop());
+    }
+    
+    if (ctx.expr_stmt()) {
+      console.log("Found expression statement:", ctx.expr_stmt().expr().getText());
+      return this.visit(ctx.expr_stmt());
+    }
+    
+    if (ctx.block_stmt()) {
+      console.log("Found block statement");
+      return this.visit(ctx.block_stmt());
+    }
+    
+    // Fallback
+    console.log("Unhandled statement type");
+    return this.visitChildren(ctx);
   }
 
   /* ─────────── Statements ─────────── */
@@ -404,19 +458,26 @@ export class RustLikeCompilerVisitor
 
   /* arithmetic / comparison  */
   visitBinaryOpExpr(ctx: BinaryOpExprContext): Item {
+    console.log("Visiting binary op expression:", ctx.getText());
+    
     const lhs = ctx.expr(0);
     const rhs = ctx.expr(1);
     const op = ctx.INT_OP().getText();
+    
+    console.log("Binary operation:", lhs.getText(), op, rhs.getText());
 
     if (op === "-") {
+      console.log("Generating subtraction code");
       // a - b  ⇒  a; b; -1; TIMES; PLUS
       this.visit(lhs);
       this.visit(rhs);
       this.instructions.push(new Inst(Bytecode.LDCI, -1));
       this.instructions.push(new Inst(Bytecode.TIMES));
       this.instructions.push(new Inst(Bytecode.PLUS));
+      console.log("Added subtraction instructions");
 
     } else if (op === "/" || op === "%") {
+      console.log("Generating division/modulo code");
       // a / b or a % b ⇒ repeated subtraction loop
       const tDivd = this.freshTemp();
       const tDivs = this.freshTemp();
@@ -473,41 +534,53 @@ export class RustLikeCompilerVisitor
       // leave result
       const resultTemp = op === "/" ? tQuot : tDivd;
       this.instructions.push(new Inst(Bytecode.LDHS, resultTemp));
+      console.log("Added division/modulo instructions");
 
     } else if (op === ">") {
+      console.log("Generating greater-than code");
       // a > b ⇒ b < a
       this.visit(rhs);
       this.visit(lhs);
       this.instructions.push(new Inst(Bytecode.LT));
+      console.log("Added greater-than instructions");
 
     } else if (op === "<=") {
+      console.log("Generating less-than-or-equal code");
       // a <= b ⇒ !(b < a)
       this.visit(rhs);
       this.visit(lhs);
       this.instructions.push(new Inst(Bytecode.LT));
       this.instructions.push(new Inst(Bytecode.NOT));
+      console.log("Added less-than-or-equal instructions");
 
     } else if (op === ">=") {
+      console.log("Generating greater-than-or-equal code");
       // a >= b ⇒ !(a < b)
       this.visit(lhs);
       this.visit(rhs);
       this.instructions.push(new Inst(Bytecode.LT));
       this.instructions.push(new Inst(Bytecode.NOT));
+      console.log("Added greater-than-or-equal instructions");
 
     } else if (op === "!=") {
+      console.log("Generating not-equal code");
       // a != b ⇒ !(a == b)
       this.visit(lhs);
       this.visit(rhs);
       this.instructions.push(new Inst(Bytecode.EQ));
       this.instructions.push(new Inst(Bytecode.NOT));
+      console.log("Added not-equal instructions");
 
     } else {
+      console.log(`Generating fallback code for operator: ${op}`);
       // fallback for +, *, <, ==
       this.visit(lhs);
       this.visit(rhs);
       this.instructions.push(new Inst(OP_TO_BYTE[op]));
+      console.log(`Added ${op} instruction:`, OP_TO_BYTE[op]);
     }
 
+    console.log("Binary op expression result:", this.instructions.length);
     return this.defaultResult();
   }
 
@@ -524,18 +597,24 @@ export class RustLikeCompilerVisitor
   /*  catch-all infix expression that the grammar
       may generate for any other constructs       */
   visitExpr(ctx: ExprContext): Item {
+    console.log("Visiting expression:", ctx.getText());
+    console.log("Child count:", ctx.getChildCount());
+    
     if (ctx.getChildCount() === 2) {
       // Handle unary operators including ref and deref
       const op = ctx.getChild(0).getText();
       const expr = ctx.getChild(1) as ExprContext;
+      console.log("Unary expression:", op, expr.getText());
 
       if (op === '&') {
         this.visit(expr);
         this.instructions.push(new Inst(Bytecode.REF));
+        console.log("Added REF instruction");
         return this.defaultResult();
       } else if (op === '*') {
         this.visit(expr);
         this.instructions.push(new Inst(Bytecode.DEREF));
+        console.log("Added DEREF instruction");
         return this.defaultResult();
       }
     }
@@ -544,16 +623,22 @@ export class RustLikeCompilerVisitor
       const lhs = ctx.getChild(0) as ExprContext;
       const opTxt = ctx.getChild(1).getText();
       const rhs = ctx.getChild(2) as ExprContext;
+      console.log("Binary expression:", lhs.getText(), opTxt, rhs.getText());
 
       if (OP_TO_BYTE[opTxt]) {
+        console.log("Found operator in OP_TO_BYTE map:", opTxt);
         this.visit(lhs);
         this.visit(rhs);
         this.instructions.push(new Inst(OP_TO_BYTE[opTxt]));
+        console.log("Added binary op instruction:", OP_TO_BYTE[opTxt]);
         return this.defaultResult();
       }
 
       // all other binary ops handled above in visitBinaryOpExpr
+      console.log("Binary operator not in OP_TO_BYTE map, using visitChildren");
     }
+    
+    console.log("Using visitChildren for expression");
     return this.visitChildren(ctx);
   }
 
@@ -639,26 +724,35 @@ export class RustLikeCompilerVisitor
 
   visitCallExpr(ctx: CallExprContext): Item {
     try {
+      console.log("Visiting function call:", ctx.getText());
+      
       // Visit the function expression first
+      console.log("Processing function name:", ctx.expr().getText());
       this.visit(ctx.expr());
+      console.log("Instructions after function name:", this.instructions.length);
 
       // Count arguments
       const numArgs = ctx.arg_list_opt() && ctx.arg_list_opt().expr() 
         ? ctx.arg_list_opt().expr().length 
         : 0;
+      console.log("Number of arguments:", numArgs);
 
       // Visit all arguments
       if (ctx.arg_list_opt() && ctx.arg_list_opt().expr()) {
         const args = ctx.arg_list_opt().expr();
         for (let i = 0; i < args.length; i++) {
+          console.log(`Processing argument ${i}:`, args[i].getText());
           this.visit(args[i]);
+          console.log(`Instructions after argument ${i}:`, this.instructions.length);
         }
       }
 
       // Call the function with the number of arguments
       this.instructions.push(new Inst(Bytecode.CALL, numArgs));
+      console.log(`Added CALL instruction with ${numArgs} arguments`);
 
       // The result of the function call will be left on the stack by the VM
+      console.log("Function call completed, instruction count:", this.instructions.length);
       return this.defaultResult();
     } catch (error) {
       console.error("Error in function call:", error);
