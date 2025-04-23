@@ -510,6 +510,9 @@ export class RustLikeCompilerVisitor
 
   visitBlock_expr(ctx: Block_exprContext): Item {
     try {
+      // Enter block scope
+      this.instructions.push(new Inst(Bytecode.ENTER_SCOPE, 0));
+
       // Visit all statements
       if (ctx.stmt_list() && ctx.stmt_list().stmt()) {
         const stmts = ctx.stmt_list().stmt();
@@ -519,13 +522,18 @@ export class RustLikeCompilerVisitor
       }
 
       // Visit the final expression if it exists
+      let result: Item;
       if (ctx.expr()) {
-        return this.visit(ctx.expr());
+        result = this.visit(ctx.expr());
       } else {
         // No expression in the block, return unit value
         this.instructions.push(new Inst(Bytecode.LDCI, 0)); // UNIT value
-        return this.defaultResult();
+        result = this.defaultResult();
       }
+
+      // Exit block scope
+      this.instructions.push(new Inst(Bytecode.EXIT_SCOPE));
+      return result;
     } catch (error) {
       console.error("Error in block expression:", error);
       throw error;

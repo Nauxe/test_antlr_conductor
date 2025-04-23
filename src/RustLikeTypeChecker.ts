@@ -261,8 +261,9 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
 
   visitBlock_expr(ctx: Block_exprContext): RustLikeType {
     try {
-      // Create a new scope for the block
+      // Create a new scope for the block and scan for declarations
       const scanRes: ScanResult = new ScopedScannerVisitor(ctx).visit(ctx);
+      const prevEnv = this.typeEnv;
       this.typeEnv = this.typeEnv.extend(scanRes);
 
       // Visit all statements in the block
@@ -281,8 +282,8 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
         result = UNIT_TYPE;
       }
 
-      // Exit block scope
-      this.typeEnv = this.typeEnv.parent;
+      // Exit block scope and restore previous environment
+      this.typeEnv = prevEnv;
       return result;
     } catch (error) {
       console.error("Error in block expression:", error);
