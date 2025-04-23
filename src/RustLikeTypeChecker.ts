@@ -389,7 +389,6 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   //
 
   visitDecl(ctx: DeclContext): RustLikeType {
-    this.parseType()
     return UNIT_TYPE;
   }
 
