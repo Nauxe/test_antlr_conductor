@@ -26,6 +26,12 @@ export enum Bytecode { // To be put on operand stack
   LDCC = 22, // Load constant closure
   RET = 23,
   DECL = 24, // Declare identifier 
+  NEW_ARRAY = 25, // Create new array from elements on stack
+  NEW_TUPLE = 26, // Create new tuple from elements on stack
+  NEW_RANGE = 27, // Create new range from start and end
+  INDEX = 28, // Index into array/string
+  REF = 29, // Create a reference to a value
+  DEREF = 30, // Dereference a reference
 }
 
 // Represents numbers of elements popped from OS to run the instruction 
@@ -55,6 +61,12 @@ export const BytecodeArity: Record<Bytecode, number> = {
   [Bytecode.LDCC]: 1,
   [Bytecode.RET]: 0,
   [Bytecode.DECL]: 0, // Operand: { name: string, type: RustLikeType }
+  [Bytecode.NEW_ARRAY]: 1, // Operand: number of elements
+  [Bytecode.NEW_TUPLE]: 1, // Operand: number of elements
+  [Bytecode.NEW_RANGE]: 0, // Takes start and end from stack
+  [Bytecode.INDEX]: 0, // Takes array/string and index from stack
+  [Bytecode.REF]: 0, // Takes value from stack, creates reference
+  [Bytecode.DEREF]: 0, // Takes reference from stack, gets value
 }
 
 export interface Frame {
@@ -213,69 +225,83 @@ export class RustLikeVirtualMachine {
         throw new Error(`Unbound primitive symbol: ${name}`);
       }
       case Bytecode.CALL: {
-        // Current closure implementation assumes no names are declared within closures themselves
-        // ^ This is related to one TODO below
-
-        const fnItem = this.OS.pop()!;
-        if (fnItem.tag !== Tag.CAPTURED_CLOSURE) {
-          throw new Error("CALL expects a closure");
-        }
-
-        const { funcAddr, capturedVars, paramNames } = fnItem.value as CapturedClosureValue;
-
-        // Pop args in reverse order
-        const args: Item[] = [];
-        for (let i = 0; i < paramNames.length; i++) {
-          args.unshift(this.OS.pop()!); // reverse order
-        }
-
-        const allBindings = new Map<string, Item>();
-
-        // Insert captures into newBindings
-        for (const [name, item] of capturedVars.entries()) {
-          allBindings.set(name, item);
-        }
-
-        // Insert args (or shadow captures if same name) into newBindings
-        for (let i = 0; i < paramNames.length; i++) {
-          const name = paramNames[i];
-          allBindings.set(name, args[i]);
-        }
-
-        // TODO: add bindings declared in the function here after scanning them 
-
-        // Split bindings into bindings of stack allocated and heap allocated objects
-        const heapBindings = new Map<string, Item>();
-        const stackBindings = new Map<string, Item>(); // Only closures should be here
-
-        for (const [name, item] of allBindings) {
-          if (item.tag === Tag.CLOSURE) {
-            stackBindings.set(name, item);
-          } else {
-            heapBindings.set(name, item);
+        try {
+          if (this.OS.length === 0) {
+            throw new Error("Stack underflow: Cannot call with empty stack");
           }
+          
+          const fnItem = this.OS[this.OS.length - 1];
+          if (!fnItem || (fnItem.tag !== Tag.CLOSURE && fnItem.tag !== Tag.CAPTURED_CLOSURE)) {
+            throw new Error(`Cannot call non-function value: ${fnItem ? Tag[fnItem.tag] : 'undefined'}`);
+          }
+          
+          let funcAddr: number;
+          let paramNames: string[];
+          let capturedVars: Map<string, Item> = new Map();
+          
+          if (fnItem.tag === Tag.CLOSURE) {
+            // Handle regular closure
+            const closureData = fnItem.value as ClosureValue;
+            funcAddr = closureData.funcAddr;
+            paramNames = closureData.paramNames;
+          } else {
+            // Handle captured closure
+            const capturedClosureData = fnItem.value as CapturedClosureValue;
+            funcAddr = capturedClosureData.funcAddr;
+            paramNames = capturedClosureData.paramNames;
+            capturedVars = capturedClosureData.capturedVars;
+          }
+          
+          const numParams = paramNames.length;
+          if (this.OS.length < numParams + 1) {
+            throw new Error(`Not enough arguments for function call: expected ${numParams}, got ${this.OS.length - 1}`);
+          }
+          
+          // Save current environment and PC
+          const returnPC = this.PC;
+          const oldEnv = this.E;
+          
+          // Pop arguments and the function
+          const args: Item[] = [];
+          for (let i = 0; i < numParams; i++) {
+            args.unshift(this.OS.pop()!); // Get in reverse order
+          }
+          this.OS.pop(); // Remove function
+          
+          // Create new frame for return
+          const frame: Frame = {
+            __return_pc: returnPC,
+            __old_env: oldEnv,
+            bindings: new Map()
+          };
+          this.RTS.push(frame);
+          
+          // Create new environment bindings
+          const allBindings = new Map<string, Item>();
+          
+          // Add captured variables
+          for (const [name, value] of capturedVars.entries()) {
+            allBindings.set(name, value);
+          }
+          
+          // Add parameters
+          for (let i = 0; i < numParams; i++) {
+            allBindings.set(paramNames[i], args[i]);
+          }
+          
+          // Create and set new environment
+          this.E = JS_value_to_Item(this.heap, {
+            parentAddr: oldEnv.value,
+            bindings: allBindings
+          });
+          
+          // Jump to function body
+          this.PC = funcAddr - 1; // -1 because PC gets incremented after each step
+          
+        } catch (error) {
+          console.error("Error in CALL instruction:", error);
+          throw error;
         }
-
-        // Create a new environment that extends the function's environment
-        // TODO/Extension: possibly allocate based on amount of space needed for the closure, 
-        // this can be scanned during compilation
-        const newEnv: Item = this.heap.allocEnv(128);
-        const envData = {
-          parentAddr: newEnv,
-          bindings: heapBindings,
-        };
-        this.heap.set_data(newEnv, envData);
-
-        // Save current environment and PC onto RTS
-        const newFrame: Frame = {
-          __return_pc: this.PC,
-          __old_env: this.E,
-          bindings: stackBindings,
-        }
-        this.RTS.push(newFrame);
-
-        this.E = newEnv.value;
-        this.PC = funcAddr - 1; // -1 because PC is incremented after step()
         break;
       }
       case Bytecode.ENTER_SCOPE: {
@@ -395,20 +421,21 @@ export class RustLikeVirtualMachine {
         break;
       }
       case Bytecode.RET: {
-        const returnValue = this.OS.pop(); // Pop return value (if any)
-        const currentFrame = this.RTS.pop(); // Pop RTS frame
-        if (!currentFrame) throw new Error("Runtime stack underflow on RET");
+        // Pop the return value
+        const retVal = this.OS.pop()!;
 
-        // Restore PC and E 
-        this.PC = currentFrame.__return_pc;
-        this.E = currentFrame.__old_env;
+        // Pop the frame
+        const frame = this.RTS.pop()!;
 
-        if (returnValue !== undefined) {
-          this.OS.push(returnValue); // Push return value back on OS
-        } else {
-          this.OS.push(new Item(Tag.UNIT, 0, undefined));
-        }
-        return;
+        // Restore environment
+        this.E = frame.__old_env;
+
+        // Jump back to caller
+        this.PC = frame.__return_pc - 1; // -1 since PC is incremented every step
+
+        // Push return value
+        this.OS.push(retVal);
+        break;
       }
       case Bytecode.DECL: {
         const { name, rustLikeType } = inst.operand!;
@@ -428,6 +455,70 @@ export class RustLikeVirtualMachine {
           const curEnv = this.heap.get_data(this.E) as EnvironmentValue;
           curEnv.bindings.set(name, undefined);
         }
+      }
+      case Bytecode.NEW_ARRAY: {
+        const numElements = inst.operand as number;
+        const elements: Item[] = [];
+        for (let i = 0; i < numElements; i++) {
+          elements.unshift(this.OS.pop()!);
+        }
+        const array = new Item(Tag.ARRAY, 0, elements);
+        this.OS.push(array);
+        break;
+      }
+      case Bytecode.NEW_TUPLE: {
+        const numElements = inst.operand as number;
+        const elements: Item[] = [];
+        for (let i = 0; i < numElements; i++) {
+          elements.unshift(this.OS.pop()!);
+        }
+        const tuple = new Item(Tag.TUPLE, 0, elements);
+        this.OS.push(tuple);
+        break;
+      }
+      case Bytecode.NEW_RANGE: {
+        const end = this.OS.pop()!;
+        const start = this.OS.pop()!;
+        const range = new Item(Tag.RANGE, 0, { start: start.value, end: end.value });
+        this.OS.push(range);
+        break;
+      }
+      case Bytecode.INDEX: {
+        const index = this.OS.pop()!;
+        const container = this.OS.pop()!;
+        
+        if (container.tag === Tag.ARRAY || container.tag === Tag.TUPLE) {
+          const elements = container.value as Item[];
+          if (index.value < 0 || index.value >= elements.length) {
+            throw new Error(`Index ${index.value} out of bounds for ${container.tag}`);
+          }
+          this.OS.push(elements[index.value]);
+        } else if (container.tag === Tag.STRING) {
+          const str = container.value as string;
+          if (index.value < 0 || index.value >= str.length) {
+            throw new Error(`Index ${index.value} out of bounds for string`);
+          }
+          this.OS.push(new Item(Tag.STRING, 0, str[index.value]));
+        } else {
+          throw new Error(`Cannot index into ${container.tag}`);
+        }
+        break;
+      }
+      case Bytecode.REF: {
+        const value = this.OS.pop()!;
+        // Create a reference to the value
+        const ref = new Item(Tag.REF, 0, value);
+        this.OS.push(ref);
+        break;
+      }
+      case Bytecode.DEREF: {
+        const ref = this.OS.pop()!;
+        if (ref.tag !== Tag.REF) {
+          throw new Error("Cannot dereference non-reference value");
+        }
+        // Get the value being referenced
+        this.OS.push(ref.value);
+        break;
       }
     }
   }

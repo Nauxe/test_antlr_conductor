@@ -14,3 +14,11 @@ dist/
 
 #!.yarn/cache
 .pnp.*
+src/parser/RustLike.interp
+src/parser/RustLike.tokens
+src/parser/RustLikeLexer.tokens
+src/parser/RustLikeLexer.interp
+src/parser/RustLikeLexer.ts
+src/parser/RustLikeListener.ts
+src/parser/RustLikeParser.ts
+src/parser/RustLikeVisitor.ts

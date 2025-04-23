@@ -29,7 +29,7 @@ decl
 
 // ─── Functions ───────────────────────────────────────────────────────────────
 fn_decl
-    : 'fn' IDENTIFIER '(' param_list_opt ')' '->' type (block_stmt | block_expr)
+    : 'fn' IDENTIFIER '(' param_list_opt ')' '->' type block_expr
     ;
 
 param_list_opt 
@@ -72,6 +72,8 @@ block_expr
 //   - primary atoms
 expr
     : BOOL_OP expr                               # unaryExpr
+    | '&' expr                                   # refExpr
+    | '*' expr                                   # derefExpr
     | expr '[' expr ']'                          # indexExpr
     | expr '(' arg_list_opt ')'                  # callExpr
     | expr INT_OP expr                           # binaryOpExpr
@@ -126,6 +128,7 @@ type
     | 'u32'
     | 'bool'
     | 'string'
+    | '&' type                // reference type
     | 'fn' '(' type_list_opt ')' '->' type
     ;
 

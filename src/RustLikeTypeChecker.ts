@@ -243,9 +243,10 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
 
   visitBlock_expr(ctx: Block_exprContext): RustLikeType {
     this.typeEnv = this.typeEnv.extend(null);
-    this.visit(ctx.stmt_list());
+    this.visit(ctx.stmt_list()); // Visit all statements
+    const exprType = this.visit(ctx.expr()); // visit the final expression
     this.typeEnv = this.typeEnv.parent;
-    return this.visit(ctx.expr());
+    return exprType;
   }
 
   visitBool_expr(ctx: Bool_exprContext): RustLikeType {
