@@ -61,60 +61,20 @@ export class RustLikeCompilerVisitor
   /* ─────────── Top-level ─────────── */
 
   visitProg(ctx: ProgContext): Item {
-    console.log("ProgContext children count:", ctx.children?.length);
-    console.log("ProgContext children types:", ctx.children?.map(c => c.constructor.name));
-    
-    // First scan all declarations to build the type environment
-    const scanner = new ScopedScannerVisitor(ctx);
-    const scanResult = scanner.visit(ctx);
-    
-    // Track instruction count to see if we've processed anything
-    const initialInstructionCount = this.instructions.length;
-    
-    // Process what we have directly
-    if (ctx.children && ctx.children.length > 0) {
-      // Process all declarations first
-      for (let i = 0; i < ctx.children.length; i++) {
-        const child = ctx.children[i];
-        if (child instanceof Fn_declContext || child instanceof DeclContext) {
-          console.log("Processing declaration child:", child.getText());
-          this.visitChild(child);
-        }
-      }
-      
-      // Process remaining children
-      for (let i = 0; i < ctx.children.length; i++) {
-        const child = ctx.children[i];
-        if (!(child instanceof Fn_declContext) && !(child instanceof DeclContext)) {
-          // Skip EOF token
-          if (child.constructor.name !== 'TerminalNodeImpl' || child.getText() !== '<EOF>') {
-            console.log("Processing non-declaration child:", child.getText());
-            this.visitChild(child);
-          }
-        }
-      }
+    // First scan declarations to build the type environment
+    new ScopedScannerVisitor(ctx).visit(ctx);
+    // Compile the program body: either block expression or block statement
+    const be = ctx.block_expr();
+    if (be) {
+      this.visit(be);
     } else {
-      console.log("No children found in ProgContext");
+      const bs = ctx.block_stmt();
+      if (bs) {
+        this.visit(bs);
+      }
     }
-    
-    // Check if we actually processed anything
-    if (this.instructions.length === initialInstructionCount) {
-      console.error("Warning: No instructions generated from program!");
-      console.error("AST structure:", JSON.stringify(ctx, (key, value) => {
-        if (key === 'parent' || key === 'children' && Array.isArray(value)) {
-          return value.map(c => c.constructor.name + (c.getText ? ': ' + c.getText() : ''));
-        }
-        return value;
-      }, 2));
-      
-      // Try to directly process the program text as an expression
-      console.log("Attempting to process program directly as an expression");
-      this.processDirectExpression(ctx.getText().replace(/;$/, '').trim());
-    }
-    
-    // Add DONE instruction
+    // Emit DONE instruction to finish
     this.instructions.push(new Inst(Bytecode.DONE));
-    console.log("Final instruction count:", this.instructions.length);
     return this.defaultResult();
   }
 
