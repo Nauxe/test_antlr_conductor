@@ -44,7 +44,7 @@ export class RustLikeEvaluator extends BasicEvaluator {
     } catch (error) {
       // Handle errors and send them to the REPL
       this.conductor.sendOutput(`Parse error: ${error instanceof Error ? error.message : String(error)}`);
-      return;
+      //return;
     }
 
     // Conduct type checks
@@ -55,7 +55,7 @@ export class RustLikeEvaluator extends BasicEvaluator {
     } catch (error) {
       // Handle errors and send them to the REPL
       this.conductor.sendOutput(`Type checker error:\n${error instanceof Error ? error.message : String(error)}\n\n -------------------------- \n`);
-      return;
+      //return;
     }
 
     // Compile
@@ -66,7 +66,7 @@ export class RustLikeEvaluator extends BasicEvaluator {
     } catch (error) {
       // Handle errors and send them to the REPL
       this.conductor.sendOutput(`Compile error: ${error instanceof Error ? error.message : String(error)}`);
-      return;
+      //return;
     }
 
     if (this.isDebug) {
