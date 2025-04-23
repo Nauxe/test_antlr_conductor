@@ -119,6 +119,7 @@ bool_expr  : BOOL ;
 type
     : '()'                     // unit
     | 'u32'
+    | 'bool'
     | 'string'
     | 'fn' '(' type_list_opt ')' '->' type
     ;
