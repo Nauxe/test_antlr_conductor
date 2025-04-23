@@ -22,3 +22,4 @@ src/parser/RustLikeLexer.ts
 src/parser/RustLikeListener.ts
 src/parser/RustLikeParser.ts
 src/parser/RustLikeVisitor.ts
+test_function.rs
