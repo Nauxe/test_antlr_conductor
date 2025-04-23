@@ -2,7 +2,7 @@ import { AbstractParseTreeVisitor, ParserRuleContext, ParseTree, TerminalNode } 
 import { Tag } from "./Heap";
 import { RustLikeVisitor } from "./parser/grammar/RustLikeVisitor";
 import { Frame } from "./RustLikeVirtualMachine";
-import { BinaryOpExprContext, Block_exprContext, Block_stmtContext, Bool_exprContext, Break_stmtContext, CallExprContext, Continue_stmtContext, DeclContext, Expr_stmtContext, Fn_declContext, If_exprContext, If_stmtContext, IndexExprContext, Print_stmtContext, ProgContext, Str_exprContext, TypeContext, U32_exprContext, UnaryExprContext, While_loopContext } from "./parser/grammar/RustLikeParser";
+import { BinaryOpExprContext, Block_exprContext, Block_stmtContext, Bool_exprContext, Break_stmtContext, CallExprContext, Continue_stmtContext, DeclContext, Expr_stmtContext, ExprContext, Fn_declContext, If_exprContext, If_stmtContext, IndexExprContext, Print_stmtContext, ProgContext, RustLikeParser, Str_exprContext, TypeContext, U32_exprContext, UnaryExprContext, While_loopContext } from "./parser/grammar/RustLikeParser";
 import { types } from "util";
 
 type UnitType = { tag: Tag.UNIT };
@@ -163,7 +163,6 @@ class TypeEnvironment {
 
 export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLikeType> implements RustLikeVisitor<RustLikeType> {
   typeEnv: TypeEnvironment; // Has a parent address and a map for bindings
-  compileStack: Frame[]; // Has a program counter address (unused), old environment (unused), and a map for closure bindings   
 
   constructor() {
     super();
@@ -179,6 +178,8 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
     this.typeEnv = this.typeEnv.extend(scanRes);
 
     const resType: RustLikeType = this.visitChildren(ctx);
+    if (!typeEqual(resType, UNIT_TYPE))
+      throw new Error("Program returned non-unit type");
     return UNIT_TYPE; // All programs are statement lists, and statements all return Unit type 
   }
 
@@ -210,29 +211,147 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
     return UNIT_TYPE; // temporary
   }
 
+  // Unary boolean op (Only possible operation is !)
   visitUnaryExpr(ctx: UnaryExprContext): RustLikeType {
     return UNIT_TYPE; // temporary
   }
 
+  // Binary op
   visitBinaryOpExpr(ctx: BinaryOpExprContext): RustLikeType {
-    return UNIT_TYPE; //temporary
+    let type1 = this.visit(ctx.expr()[0]);
+    let type2 = this.visit(ctx.expr()[1]);
+    const op = ctx.INT_OP().getText();
+    if (!typeEqual(type1, type2))
+      throw new Error(`Mismatched types in binary operation.`);
+
+    if (typeEqual(type1, U32_TYPE)) {
+      // Safe to cast now
+      type1 = type1 as U32Type;
+      type2 = type2 as U32Type;
+
+      // conduct checks for - and / to prevent overflow of unsigned int and divide by zero
+      switch (op) {
+        case '+':
+          return { tag: Tag.NUMBER, val: type1.val + type2.val };
+        case '-':
+          if (type1.val < type2.val)
+            throw new Error(`${type1.val}-${type2.val} operation will cause u32 to overflow.`);
+          return { tag: Tag.NUMBER, val: type1.val - type2.val };
+        case '*':
+          return { tag: Tag.NUMBER, val: type1.val * type2.val };
+        case '/':
+          if (type2.val === 0)
+            throw new Error(`${type1.val}/${type2.val} operation will cause division by zero error.`);
+          return { tag: Tag.NUMBER, val: type1.val / type2.val };
+        case '!=':
+          return { tag: Tag.BOOLEAN, val: type1.val !== type2.val };
+        case '==':
+          return { tag: Tag.BOOLEAN, val: type1.val === type2.val };
+        case '<':
+          return { tag: Tag.BOOLEAN, val: type1.val < type2.val };
+        case '<=':
+          return { tag: Tag.BOOLEAN, val: type1.val <= type2.val };
+        case '>':
+          return { tag: Tag.BOOLEAN, val: type1.val > type2.val };
+        case '>=':
+          return { tag: Tag.BOOLEAN, val: type1.val >= type2.val };
+      }
+    } else if (typeEqual(type1, BOOL_TYPE)) {
+      // Safe to cast now
+      type1 = type1 as BoolType;
+      type2 = type2 as BoolType;
+
+      // conduct checks for - and / to prevent overflow of unsigned int and divide by zero
+      switch (op) {
+        case '!=':
+          return { tag: Tag.BOOLEAN, val: type1.val !== type2.val };
+        case '==':
+          return { tag: Tag.BOOLEAN, val: type1.val === type2.val };
+        case '<':
+          return { tag: Tag.BOOLEAN, val: type1.val < type2.val };
+        case '<=':
+          return { tag: Tag.BOOLEAN, val: type1.val <= type2.val };
+        case '>':
+          return { tag: Tag.BOOLEAN, val: type1.val > type2.val };
+        case '>=':
+          return { tag: Tag.BOOLEAN, val: type1.val >= type2.val };
+        default:
+          throw new Error(`Expected u32 types for binary operation ${op} got ${type1} and ${type2}.`);
+      }
+    } else {
+      throw new Error(`Expected u32 or boolean types for binary operation ${op} got ${type1} and ${type2}.`);
+    }
   }
 
   visitCallExpr(ctx: CallExprContext): RustLikeType {
-    return UNIT_TYPE; // temporary
+    const fnName: string = ctx.expr().getText();
+    const idType: RustLikeType = this.typeEnv.lookUpType(fnName);
+    if (idType.tag !== Tag.CLOSURE) {
+      throw new Error(`Expected function type for ${fnName}, found ${idType}`);
+    }
+
+    const fnType: FnType = idType;
+    const argTypes =
+      ctx.arg_list_opt() === null
+        ? []
+        : ctx.arg_list_opt().expr().map(
+          (arg: ExprContext) => this.visit(arg)
+        );
+
+    if (argTypes.length !== fnType.paramTypes.length) {
+      throw new Error(`Function takes ${fnType.paramTypes.length} arguments but ${argTypes.length} were supplied.`);
+    }
+
+    for (let i = 0; i < argTypes.length; i++) {
+      if (!typeEqual(argTypes[i], fnType.paramTypes[i])) {
+        throw new Error(`Mismatched types, expected ${JSON.stringify(fnType.paramTypes[i])}, found ${JSON.stringify(argTypes[i])}.`);
+      }
+    }
+
+    return fnType.retType;
+  }
+
+  visitTerminal(_node: TerminalNode): RustLikeType {
+    switch (_node.getSymbol().type) {
+      case RustLikeParser.IDENTIFIER: {
+        return this.typeEnv.lookUpType(_node.getText());
+      }
+      case RustLikeParser.U32: {
+        return {
+          tag: Tag.NUMBER,
+          val: parseInt(_node.getText())
+        };
+      }
+      case RustLikeParser.BOOL: {
+        return {
+          tag: Tag.BOOLEAN,
+          val: _node.getText() === "true"
+        };
+      }
+      case RustLikeParser.STRING: {
+        return {
+          tag: Tag.STRING
+        };
+      }
+      default: {
+        //TODO: Future implementation can add types for + and -
+        return UNIT_TYPE;
+      }
+    }
   }
 
   //
   // Visit statements
-  // All statements should return UNIT TYPE
+  // 
+  // All statements should return Unit type
   //
 
   visitDecl(ctx: DeclContext): RustLikeType {
-    return UNIT_TYPE; // Temp
+    return UNIT_TYPE;
   }
 
   visitFn_decl(ctx: Fn_declContext): RustLikeType {
-    return UNIT_TYPE; // temporary
+    return UNIT_TYPE;
   }
 
   visitPrint_stmt(ctx: Print_stmtContext): RustLikeType {
