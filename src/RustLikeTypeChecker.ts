@@ -441,14 +441,7 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
     });
 
     // Type check the function body
-    let bodyType: RustLikeType;
-    if (ctx.block_expr()) {
-      bodyType = this.visit(ctx.block_expr());
-    } else if (ctx.block_stmt()) {
-      bodyType = this.visit(ctx.block_stmt());
-    } else {
-      throw new Error(`Function ${fnName} must have a body`);
-    }
+    const bodyType = this.visit(ctx.block_expr());
 
     // Restore the old environment
     this.typeEnv = oldEnv;

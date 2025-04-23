@@ -97,7 +97,7 @@ export class RustLikeCompilerVisitor
   /* functions are recognised but not compiled yet */
   visitFn_decl(ctx: Fn_declContext): Item {
     const fnName = ctx.IDENTIFIER().getText();
-    const block = ctx.block_expr() === null ? ctx.block_stmt() : ctx.block_expr();
+    const block = ctx.block_expr();
     
     // Get parameter names and types
     const paramNames: string[] = [];
@@ -147,16 +147,9 @@ export class RustLikeCompilerVisitor
     });
 
     // Compile function body
-    if (block instanceof Block_exprContext) {
-      // For block expressions, visit the statements and final expression
-      const stmts = block.stmt_list().stmt();
-      stmts.forEach((s) => this.visit(s));
-      this.visit(block.expr());
-    } else {
-      // For block statements, just visit the statements
-      const stmts = block.stmt_list().stmt();
-      stmts.forEach((s) => this.visit(s));
-    }
+    const stmts = block.stmt_list().stmt();
+    stmts.forEach((s) => this.visit(s));
+    this.visit(block.expr());
 
     // Exit function scope and return
     this.instructions.push(new Inst(Bytecode.EXIT_SCOPE));

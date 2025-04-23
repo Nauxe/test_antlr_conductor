@@ -29,7 +29,7 @@ decl
 
 // ─── Functions ───────────────────────────────────────────────────────────────
 fn_decl
-    : 'fn' IDENTIFIER '(' param_list_opt ')' '->' type (block_stmt | block_expr)
+    : 'fn' IDENTIFIER '(' param_list_opt ')' '->' type block_expr
     ;
 
 param_list_opt 
