@@ -97,12 +97,18 @@ export class RustLikeCompilerVisitor
   /* functions are recognised but not compiled yet */
   visitFn_decl(ctx: Fn_declContext): Item {
     const fnName = ctx.IDENTIFIER().getText();
+    
+    // Make sure block_expr exists
+    if (!ctx.block_expr()) {
+      throw new Error(`Function ${fnName} must have a body`);
+    }
+    
     const block = ctx.block_expr();
     
     // Get parameter names and types
     const paramNames: string[] = [];
     const paramTypes: Item[] = [];
-    if (ctx.param_list_opt().param_list() !== null) {
+    if (ctx.param_list_opt().param_list()) {
       ctx.param_list_opt().param_list().param().forEach((param) => {
         paramNames.push(param.IDENTIFIER().getText());
         paramTypes.push(new Item(Tag.UNIT, 0, 0)); // TODO: Parse actual types
@@ -132,6 +138,7 @@ export class RustLikeCompilerVisitor
     // Store current instruction pointer for the function
     const fnStart = this.instructions.length;
     this.instructions.push(new Inst(Bytecode.LDCI, fnStart));
+    this.instructions.push(new Inst(Bytecode.ASSIGN, fnName));
 
     // Enter function scope
     this.instructions.push(new Inst(Bytecode.ENTER_SCOPE, scanRes.names.length + paramNames.length));
@@ -218,7 +225,7 @@ export class RustLikeCompilerVisitor
     }
 
     if (ctx.expr()) return this.visit(ctx.expr()!); // parenthesised
-    return this.defaultResult();
+    return this.visitChildren(ctx);
   }
 
   /* ───── literals ───── */

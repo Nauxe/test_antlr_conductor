@@ -433,6 +433,11 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
       });
     }
 
+    // Check that the function has a body
+    if (!ctx.block_expr()) {
+      throw new Error(`Function ${fnName} must have a body`);
+    }
+
     // Create a new scope for the function body
     const oldEnv = this.typeEnv;
     this.typeEnv = this.typeEnv.extend({
