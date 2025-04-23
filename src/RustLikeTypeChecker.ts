@@ -188,27 +188,42 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   //
 
   visitIf_expr(ctx: If_exprContext): RustLikeType {
-    return UNIT_TYPE; // temporary
+    let predType = this.visit(ctx.expr());
+
+    if (!typeEqual(predType, BOOL_TYPE))
+      throw new Error(`Expected boolean predicate for if statement.`);
+
+    predType = predType as BoolType;
+
+    let consType = this.visit(ctx.block_expr()[0]);
+    let altType = this.visit(ctx.block_expr()[1]);
+
+    if (!typeEqual(consType, altType))
+      throw new Error(`Mismatched types in if-statement consequent and alternative.`);
+
+    return predType.val ? consType : altType;
   }
 
   visitBlock_expr(ctx: Block_exprContext): RustLikeType {
-    return UNIT_TYPE; // temporary
+    this.visit(ctx.stmt_list());
+    return this.visit(ctx.expr());
   }
 
   visitBool_expr(ctx: Bool_exprContext): RustLikeType {
-    return UNIT_TYPE; // temporary
+    return { tag: Tag.BOOLEAN, val: ctx.getText() === "true" };
   }
 
   visitU32_expr(ctx: U32_exprContext): RustLikeType {
-    return UNIT_TYPE; // temporary
+    return { tag: Tag.NUMBER, val: parseInt(ctx.getText()) };
   }
 
   visitStr_expr(ctx: Str_exprContext): RustLikeType {
-    return UNIT_TYPE; // temporary
+    return STRING_TYPE;
   }
 
   visitIndexExpr(ctx: IndexExprContext): RustLikeType {
-    return UNIT_TYPE; // temporary
+    // TODO: Future implementation
+    return UNIT_TYPE;
   }
 
   // Unary boolean op (Only possible operation is !)
