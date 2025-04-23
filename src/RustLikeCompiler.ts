@@ -61,72 +61,57 @@ export class RustLikeCompilerVisitor
   /* ─────────── Top-level ─────────── */
 
   visitProg(ctx: ProgContext): Item {
-    console.log("ProgContext children:", ctx.children?.map(c => c.constructor.name));
+    console.log("ProgContext children count:", ctx.children?.length);
+    console.log("ProgContext children types:", ctx.children?.map(c => c.constructor.name));
     
     // First scan all declarations to build the type environment
     const scanner = new ScopedScannerVisitor(ctx);
     const scanResult = scanner.visit(ctx);
-
-    // Extract all statements from the block
-    let stmts;
-    if (ctx.block_expr()) {
-      console.log("Program contains a block expression");
-      if (ctx.block_expr().stmt_list() && ctx.block_expr().stmt_list().stmt()) {
-        stmts = ctx.block_expr().stmt_list().stmt();
-        console.log("Number of statements in block_expr:", stmts.length);
-        console.log("Statement types:", stmts.map(s => 
-          s.fn_decl() ? "fn_decl" : 
-          s.decl() ? "decl" : 
-          s.expr_stmt() ? `expr_stmt(${s.expr_stmt()?.expr().getText()})` : 
-          "other_stmt"
-        ));
-      }
-    } else if (ctx.block_stmt()) {
-      console.log("Program contains a block statement");
-      if (ctx.block_stmt().stmt_list() && ctx.block_stmt().stmt_list().stmt()) {
-        stmts = ctx.block_stmt().stmt_list().stmt();
-        console.log("Number of statements in block_stmt:", stmts.length);
-        console.log("Statement types:", stmts.map(s => 
-          s.fn_decl() ? "fn_decl" : 
-          s.decl() ? "decl" : 
-          s.expr_stmt() ? `expr_stmt(${s.expr_stmt()?.expr().getText()})` : 
-          "other_stmt"
-        ));
-      }
-    }
-
-    // Process all function and variable declarations first
-    const processedDecls = new Set<number>();
-    if (stmts) {
-      for (let i = 0; i < stmts.length; i++) {
-        if (stmts[i] && (stmts[i].fn_decl() || stmts[i].decl())) {
-          console.log("Pre-processing declaration:", i);
-          this.visit(stmts[i]);
-          processedDecls.add(i);
-          console.log("Instructions after declaration:", this.instructions.length);
+    
+    // Track instruction count to see if we've processed anything
+    const initialInstructionCount = this.instructions.length;
+    
+    // Process what we have directly
+    if (ctx.children && ctx.children.length > 0) {
+      // Process all declarations first
+      for (let i = 0; i < ctx.children.length; i++) {
+        const child = ctx.children[i];
+        if (child instanceof Fn_declContext || child instanceof DeclContext) {
+          console.log("Processing declaration child:", child.getText());
+          this.visitChild(child);
         }
       }
-    }
-
-    // Process all non-declaration statements
-    if (stmts) {
-      console.log("Processing non-declaration statements directly");
-      for (let i = 0; i < stmts.length; i++) {
-        if (!processedDecls.has(i)) {
-          console.log(`Processing statement ${i} (non-declaration):`);
-          this.visit(stmts[i]);
-          console.log(`Instructions after statement ${i}:`, this.instructions.length);
+      
+      // Process remaining children
+      for (let i = 0; i < ctx.children.length; i++) {
+        const child = ctx.children[i];
+        if (!(child instanceof Fn_declContext) && !(child instanceof DeclContext)) {
+          // Skip EOF token
+          if (child.constructor.name !== 'TerminalNodeImpl' || child.getText() !== '<EOF>') {
+            console.log("Processing non-declaration child:", child.getText());
+            this.visitChild(child);
+          }
         }
       }
+    } else {
+      console.log("No children found in ProgContext");
     }
-
-    // Handle final expression if there's a block_expr
-    if (ctx.block_expr() && ctx.block_expr().expr()) {
-      console.log("Processing final expression in program:", ctx.block_expr().expr().getText());
-      this.visit(ctx.block_expr().expr());
-      console.log("Instructions after final expression:", this.instructions.length);
+    
+    // Check if we actually processed anything
+    if (this.instructions.length === initialInstructionCount) {
+      console.error("Warning: No instructions generated from program!");
+      console.error("AST structure:", JSON.stringify(ctx, (key, value) => {
+        if (key === 'parent' || key === 'children' && Array.isArray(value)) {
+          return value.map(c => c.constructor.name + (c.getText ? ': ' + c.getText() : ''));
+        }
+        return value;
+      }, 2));
+      
+      // Try to directly process the program text as an expression
+      console.log("Attempting to process program directly as an expression");
+      this.processDirectExpression(ctx.getText().replace(/;$/, '').trim());
     }
-
+    
     // Add DONE instruction
     this.instructions.push(new Inst(Bytecode.DONE));
     console.log("Final instruction count:", this.instructions.length);
@@ -812,6 +797,117 @@ export class RustLikeCompilerVisitor
     this.instructions.push(new Inst(Bytecode.INDEX));
 
     return this.defaultResult();
+  }
+
+  // Helper method to visit child of any context
+  // This is needed because some grammar rules might place expressions directly in the parse tree
+  visitChild(child: any): Item {
+    console.log("Visiting child of type:", child.constructor.name);
+    
+    // Handle block expressions directly
+    if (child instanceof Block_exprContext) {
+      console.log("Direct block expression:", child.getText());
+      return this.visit(child);
+    }
+    
+    // Handle block statements directly
+    if (child instanceof Block_stmtContext) {
+      console.log("Direct block statement:", child.getText());
+      return this.visit(child);
+    }
+    
+    // Handle binary operations directly
+    if (child instanceof BinaryOpExprContext) {
+      console.log("Direct binary operation:", child.getText());
+      return this.visitBinaryOpExpr(child);
+    }
+    
+    // Handle expressions directly
+    if (child instanceof ExprContext) {
+      console.log("Direct expression:", child.getText());
+      return this.visit(child);
+    }
+    
+    // Handle expression statements directly
+    if (child instanceof Expr_stmtContext) {
+      console.log("Direct expression statement:", child.getText());
+      return this.visit(child);
+    }
+    
+    // Handle function calls directly
+    if (child instanceof CallExprContext) {
+      console.log("Direct function call:", child.getText());
+      return this.visit(child);
+    }
+    
+    // For other child types, use the normal visit method
+    try {
+      return this.visit(child);
+    } catch (error) {
+      console.error("Error visiting child:", child.constructor.name, child.getText?.() || "no getText", error);
+      throw error;
+    }
+  }
+
+  // Process text directly as an expression when normal parsing fails
+  processDirectExpression(exprText: string): void {
+    console.log("Processing direct expression:", exprText);
+    
+    // Handle simple binary addition expression: "a + b"
+    const addMatch = exprText.match(/^(\w+)\s*\+\s*(\w+)$/);
+    if (addMatch) {
+      const [_, lhs, rhs] = addMatch;
+      console.log(`Processing direct addition: ${lhs} + ${rhs}`);
+      
+      // Try to handle the operands
+      if (!isNaN(Number(lhs))) {
+        // Left hand side is a number
+        this.instructions.push(new Inst(Bytecode.LDCI, parseInt(lhs, 10)));
+      } else {
+        // Left hand side is an identifier
+        this.instructions.push(new Inst(Bytecode.LDHS, lhs));
+      }
+      
+      if (!isNaN(Number(rhs))) {
+        // Right hand side is a number
+        this.instructions.push(new Inst(Bytecode.LDCI, parseInt(rhs, 10)));
+      } else {
+        // Right hand side is an identifier
+        this.instructions.push(new Inst(Bytecode.LDHS, rhs));
+      }
+      
+      // Add the plus instruction
+      this.instructions.push(new Inst(Bytecode.PLUS));
+      return;
+    }
+    
+    // Handle simple function call: "func(a, b)"
+    const callMatch = exprText.match(/^(\w+)\((.*)\)$/);
+    if (callMatch) {
+      const [_, funcName, argsText] = callMatch;
+      const args = argsText.split(',').map(arg => arg.trim());
+      console.log(`Processing direct function call: ${funcName}(${args.join(', ')})`);
+      
+      // Load the function
+      this.instructions.push(new Inst(Bytecode.LDHS, funcName));
+      
+      // Load arguments
+      for (const arg of args) {
+        if (!isNaN(Number(arg))) {
+          // Argument is a number
+          this.instructions.push(new Inst(Bytecode.LDCI, parseInt(arg, 10)));
+        } else {
+          // Argument is an identifier
+          this.instructions.push(new Inst(Bytecode.LDHS, arg));
+        }
+      }
+      
+      // Call the function
+      this.instructions.push(new Inst(Bytecode.CALL, args.length));
+      return;
+    }
+    
+    console.log("Unable to process direct expression, no pattern matched");
   }
 }
 
