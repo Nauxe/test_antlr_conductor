@@ -385,6 +385,7 @@ export function set_item_data(item: Item, value: any, heap?: Heap) {
     case Tag.STRING: // Fallthrough
     case Tag.ENVIRONMENT:
       heap.set_data(item, value);
+      break;
     case Tag.UNIT:
       throw new Error("Setting data of unit type");
     default:
