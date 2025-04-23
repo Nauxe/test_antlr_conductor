@@ -226,15 +226,17 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
     try {
       // Visit all statements
       if (ctx.stmt_list() && ctx.stmt_list().stmt()) {
-        ctx.stmt_list().stmt().forEach((stmt) => {
-          if (stmt) this.visit(stmt);
-        });
+        const stmts = ctx.stmt_list().stmt();
+        for (let i = 0; i < stmts.length; i++) {
+          if (stmts[i]) this.visit(stmts[i]);
+        }
       }
       
-      // Visit the final expression
+      // A block expression must have a final expression
       if (ctx.expr()) {
         return this.visit(ctx.expr());
       } else {
+        // If no expression is present, return unit type
         return UNIT_TYPE;
       }
     } catch (error) {
@@ -435,67 +437,76 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   }
 
   visitFn_decl(ctx: Fn_declContext): RustLikeType {
-    const fnName = ctx.IDENTIFIER().getText();
-    const fnRetType = parseType(ctx.type());
-    let paramNames = [];
-    let paramTypes = [];
-    
     try {
-      if (ctx.param_list_opt() && ctx.param_list_opt().param_list()) {
-        const params = ctx.param_list_opt().param_list().param();
-        if (params) {
-          params.forEach((param) => {
-            paramNames.push(param.IDENTIFIER().getText());
-            paramTypes.push(parseType(param.type()));
-          });
+      const fnName = ctx.IDENTIFIER().getText();
+      const fnRetType = parseType(ctx.type());
+      let paramNames = [];
+      let paramTypes = [];
+      
+      // Check parameter list
+      try {
+        if (ctx.param_list_opt() && ctx.param_list_opt().param_list()) {
+          const params = ctx.param_list_opt().param_list().param();
+          if (params) {
+            for (let i = 0; i < params.length; i++) {
+              const param = params[i];
+              if (param) {
+                paramNames.push(param.IDENTIFIER().getText());
+                paramTypes.push(parseType(param.type()));
+              }
+            }
+          }
         }
+      } catch (error) {
+        console.error("Error parsing parameters in type checker:", error);
+        throw new Error(`Error in parameter list type checking for function ${fnName}`);
+      }
+  
+      // Check that the function has a body according to the grammar
+      if (!ctx.block_expr()) {
+        throw new Error(`Function ${fnName} must have a body`);
+      }
+  
+      // Create a new scope for the function body
+      const oldEnv = this.typeEnv;
+      this.typeEnv = this.typeEnv.extend({
+        names: paramNames,
+        types: paramTypes
+      });
+  
+      try {
+        // Type check the function body
+        const bodyType = this.visit(ctx.block_expr());
+  
+        // Restore the old environment
+        this.typeEnv = oldEnv;
+  
+        // Check that the body type matches the return type
+        if (!typeEqual(bodyType, fnRetType)) {
+          throw new Error(`Function ${fnName} body type ${bodyType.tag} does not match return type ${fnRetType.tag}`);
+        }
+  
+        // Add the function to the environment
+        const fnType: FnType = {
+          tag: Tag.CLOSURE,
+          captureNames: [], // To be initialized in other visitors 
+          captureTypes: [], // To be initalized in other visitors
+          paramNames: paramNames,
+          paramTypes: paramTypes,
+          retType: fnRetType,
+        };
+        this.typeEnv.types.set(fnName, fnType);
+  
+        return UNIT_TYPE;
+      } catch (error) {
+        // Restore environment in case of error
+        this.typeEnv = oldEnv;
+        console.error("Error in function body type checking:", error);
+        throw new Error(`Error type checking function body for ${fnName}: ${error.message}`);
       }
     } catch (error) {
-      console.error("Error parsing parameters in type checker:", error);
-      throw new Error(`Error in parameter list type checking for function ${fnName}`);
-    }
-
-    // Check that the function has a body
-    if (!ctx.block_expr()) {
-      throw new Error(`Function ${fnName} must have a body`);
-    }
-
-    // Create a new scope for the function body
-    const oldEnv = this.typeEnv;
-    this.typeEnv = this.typeEnv.extend({
-      names: paramNames,
-      types: paramTypes
-    });
-
-    try {
-      // Type check the function body
-      const bodyType = this.visit(ctx.block_expr());
-
-      // Restore the old environment
-      this.typeEnv = oldEnv;
-
-      // Check that the body type matches the return type
-      if (!typeEqual(bodyType, fnRetType)) {
-        throw new Error(`Function ${fnName} body type ${bodyType.tag} does not match return type ${fnRetType.tag}`);
-      }
-
-      // Add the function to the environment
-      const fnType: FnType = {
-        tag: Tag.CLOSURE,
-        captureNames: [], // To be initialized in other visitors 
-        captureTypes: [], // To be initalized in other visitors
-        paramNames: paramNames,
-        paramTypes: paramTypes,
-        retType: fnRetType,
-      };
-      this.typeEnv.types.set(fnName, fnType);
-
-      return UNIT_TYPE;
-    } catch (error) {
-      // Restore environment in case of error
-      this.typeEnv = oldEnv;
-      console.error("Error in function body type checking:", error);
-      throw new Error(`Error type checking function body for ${fnName}: ${error.message}`);
+      console.error("Error in function declaration type checking:", error);
+      throw error;
     }
   }
 

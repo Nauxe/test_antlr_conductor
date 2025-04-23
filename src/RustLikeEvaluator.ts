@@ -34,47 +34,63 @@ export class RustLikeEvaluator extends BasicEvaluator {
 
       // Parse the input
       tree = parser.prog();
+      
+      // If we have errors in parsing, report them
+      if (parser.numberOfSyntaxErrors > 0) {
+        this.conductor.sendOutput(`Parse errors: ${parser.numberOfSyntaxErrors} syntax errors detected`);
+        return;
+      }
+      
+      this.conductor.sendOutput(`Parsed successfully.`);
+      
     } catch (error) {
       // Handle errors and send them to the REPL
       this.conductor.sendOutput(`Parse error: ${error instanceof Error ? error.message : String(error)}`);
+      return;
     }
 
     // Conduct type checks
     try {
-      new RustLikeTypeCheckerVisitor(this.isDebug).visit(tree);
+      const typeChecker = new RustLikeTypeCheckerVisitor(this.isDebug);
+      typeChecker.visit(tree);
+      this.conductor.sendOutput(`Type checking passed.`);
     } catch (error) {
       // Handle errors and send them to the REPL
       this.conductor.sendOutput(`Type checker error: ${error instanceof Error ? error.message : String(error)}`);
-
     }
 
     // Compile
     try {
+      this.compilerVisitor.instructions = []; // Reset instructions
       this.compilerVisitor.visit(tree);
+      this.conductor.sendOutput(`Compilation successful.`);
     } catch (error) {
       // Handle errors and send them to the REPL
       this.conductor.sendOutput(`Compile error: ${error instanceof Error ? error.message : String(error)}`);
     }
 
-    if (this.isDebug)
+    if (this.isDebug) {
       this.conductor.sendOutput(`Compiled instructions: \n${this.compilerVisitor.instructions.map(
         inst => `[${Bytecode[inst.opcode].padEnd(7)} ${inst.operand ?? ""}]\n`)
         }\n\n -------------------------- \n`);
+    }
 
     // Run instructions on the virtual machine
     let result: { value: string, debugTrace: string };
     try {
+      if (this.compilerVisitor.instructions.length === 0) {
+        throw new Error("No instructions to execute");
+      }
       result = this.VM.runInstrs(this.compilerVisitor.instructions, this.isDebug);
+      
+      if (this.isDebug)
+        this.conductor.sendOutput(`DEBUG:\n${result.debugTrace}\n\n -------------------------- \n`);
+
+      // Send the result to the REPL
+      this.conductor.sendOutput(`Result of expression: ${result.value}`);
     } catch (error) {
       // Handle errors and send them to the REPL
       this.conductor.sendOutput(`Runtime error: ${error instanceof Error ? error.message : String(error)}`);
-
     }
-
-    if (this.isDebug)
-      this.conductor.sendOutput(`DEBUG:\n${result.debugTrace}\n\n -------------------------- \n`);
-
-    // Send the result to the REPL
-    this.conductor.sendOutput(`Result of expression: ${result.value}`);
   }
 }
