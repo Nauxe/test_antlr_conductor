@@ -60,6 +60,8 @@ export class RustLikeCompilerVisitor
   /* ─────────── Top-level ─────────── */
 
   visitProg(ctx: ProgContext): Item {
+    console.log("ProgContext children:", ctx.children?.map(c => c.constructor.name));
+    
     // First scan all declarations to build the type environment
     const scanner = new ScopedScannerVisitor(ctx);
     const scanResult = scanner.visit(ctx);
@@ -67,12 +69,28 @@ export class RustLikeCompilerVisitor
     // Process function declarations first
     let stmts;
     if (ctx.block_expr()) {
+      console.log("Program contains a block expression");
       if (ctx.block_expr().stmt_list() && ctx.block_expr().stmt_list().stmt()) {
         stmts = ctx.block_expr().stmt_list().stmt();
+        console.log("Number of statements in block_expr:", stmts.length);
+        console.log("Statement types:", stmts.map(s => 
+          s.fn_decl() ? "fn_decl" : 
+          s.decl() ? "decl" : 
+          s.expr_stmt() ? "expr_stmt" : 
+          "other_stmt"
+        ));
       }
     } else if (ctx.block_stmt()) {
+      console.log("Program contains a block statement");
       if (ctx.block_stmt().stmt_list() && ctx.block_stmt().stmt_list().stmt()) {
         stmts = ctx.block_stmt().stmt_list().stmt();
+        console.log("Number of statements in block_stmt:", stmts.length);
+        console.log("Statement types:", stmts.map(s => 
+          s.fn_decl() ? "fn_decl" : 
+          s.decl() ? "decl" : 
+          s.expr_stmt() ? "expr_stmt" : 
+          "other_stmt"
+        ));
       }
     }
 
@@ -80,12 +98,15 @@ export class RustLikeCompilerVisitor
     if (stmts) {
       for (let i = 0; i < stmts.length; i++) {
         if (stmts[i] && (stmts[i].fn_decl() || stmts[i].decl())) {
+          console.log("Pre-processing declaration:", i);
           this.visit(stmts[i]);
+          console.log("Instructions after declaration:", this.instructions.length);
         }
       }
     }
 
     // Then process the block itself
+    console.log("Processing entire block");
     if (ctx.block_expr()) {
       this.visit(ctx.block_expr());
     } else if (ctx.block_stmt()) {
@@ -93,20 +114,36 @@ export class RustLikeCompilerVisitor
     } else {
       throw new Error("Program must contain either a block expression or a block statement");
     }
+    console.log("Instructions after block:", this.instructions.length);
 
     // Add DONE instruction
     this.instructions.push(new Inst(Bytecode.DONE));
+    console.log("Final instruction count:", this.instructions.length);
     return this.defaultResult();
   }
 
   visitStmt_list(ctx: Stmt_listContext): Item {
+    console.log("Visiting statement list");
+    
     if (!ctx.stmt()) {
+      console.log("No statements in list");
       return this.defaultResult();
     }
     
+    console.log("Number of statements:", ctx.stmt().length);
+    
     // Visit each statement in the list
-    for (const stmt of ctx.stmt()) {
-      this.visit(stmt);
+    for (let i = 0; i < ctx.stmt().length; i++) {
+      const stmt = ctx.stmt(i);
+      console.log(`Processing statement ${i}:`, 
+        stmt.fn_decl() ? "fn_decl" : 
+        stmt.decl() ? "decl" : 
+        stmt.expr_stmt() ? `expr_stmt(${stmt.expr_stmt()?.expr().getText()})` : 
+        "other_stmt"
+      );
+      
+      const result = this.visit(stmt);
+      console.log(`Instructions after statement ${i}:`, this.instructions.length);
     }
     
     return this.defaultResult();
@@ -295,11 +332,13 @@ export class RustLikeCompilerVisitor
 
   /* expression used *as* a statement */
   visitExpr_stmt(ctx: Expr_stmtContext): Item {
-    // Visit the expression first
+    console.log("Visiting expression statement:", ctx.expr().getText());
+    
+    // Visit the expression 
     const result = this.visit(ctx.expr());
     
-    // DO NOT add POP instruction - we want to keep the result on the stack
-    // for the final output
+    // Log the instruction count after visiting the expression
+    console.log("Instructions after visiting expression:", this.instructions.length);
     
     return result;
   }
@@ -520,22 +559,41 @@ export class RustLikeCompilerVisitor
 
   visitBlock_expr(ctx: Block_exprContext): Item {
     try {
+      console.log("Visiting block expression");
+      
       // Enter block scope
       this.instructions.push(new Inst(Bytecode.ENTER_SCOPE, 0));
+      console.log("Added ENTER_SCOPE instruction");
 
       // Visit all statements
       if (ctx.stmt_list() && ctx.stmt_list().stmt()) {
         const stmts = ctx.stmt_list().stmt();
+        console.log("Number of statements in block_expr:", stmts.length);
+        
         for (let i = 0; i < stmts.length; i++) {
-          if (stmts[i]) this.visit(stmts[i]);
+          if (stmts[i]) {
+            console.log(`Processing statement ${i} in block_expr:`, 
+              stmts[i].fn_decl() ? "fn_decl" : 
+              stmts[i].decl() ? "decl" : 
+              stmts[i].expr_stmt() ? `expr_stmt(${stmts[i].expr_stmt()?.expr().getText()})` : 
+              "other_stmt"
+            );
+            this.visit(stmts[i]);
+            console.log(`Instructions after statement ${i} in block_expr:`, this.instructions.length);
+          }
         }
+      } else {
+        console.log("No statements in block_expr");
       }
 
       // Visit the final expression if it exists
       let result: Item;
       if (ctx.expr()) {
+        console.log("Processing final expression in block_expr:", ctx.expr().getText());
         result = this.visit(ctx.expr());
+        console.log("Instructions after final expression:", this.instructions.length);
       } else {
+        console.log("No final expression in block_expr, adding UNIT value");
         // No expression in the block, return unit value
         this.instructions.push(new Inst(Bytecode.LDCI, 0)); // UNIT value
         result = this.defaultResult();
@@ -543,6 +601,8 @@ export class RustLikeCompilerVisitor
 
       // Exit block scope
       this.instructions.push(new Inst(Bytecode.EXIT_SCOPE));
+      console.log("Added EXIT_SCOPE instruction");
+      
       return result;
     } catch (error) {
       console.error("Error in block expression:", error);
