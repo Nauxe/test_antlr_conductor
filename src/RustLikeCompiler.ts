@@ -94,6 +94,7 @@ export class RustLikeCompilerVisitor
       this.visit(ctx.block_stmt());
     }
 
+    // Add DONE instruction
     this.instructions.push(new Inst(Bytecode.DONE));
     return this.defaultResult();
   }
@@ -288,8 +289,8 @@ export class RustLikeCompilerVisitor
 
   /* expression used *as* a statement     */
   visitExpr_stmt(ctx: Expr_stmtContext): Item {
+    // Visit the expression but don't pop its result
     this.visit(ctx.expr());
-    this.instructions.push(new Inst(Bytecode.POP));
     return this.defaultResult();
   }
 
@@ -527,7 +528,7 @@ export class RustLikeCompilerVisitor
       }
     } catch (error) {
       console.error("Error in block expression:", error);
-      throw new Error(`Error in block expression: ${error.message}`);
+      throw error;
     }
   }
 
@@ -571,7 +572,7 @@ export class RustLikeCompilerVisitor
         }
       }
 
-      // Call the function
+      // Call the function and keep the result on the stack
       this.instructions.push(new Inst(Bytecode.CALL, ctx.arg_list_opt() ? ctx.arg_list_opt().expr().length : 0));
 
       return this.defaultResult();
