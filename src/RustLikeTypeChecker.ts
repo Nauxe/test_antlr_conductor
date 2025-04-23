@@ -206,13 +206,15 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   }
 
   visitProg(ctx: ProgContext): RustLikeType {
-    const scanRes: ScanResult = new ScopedScannerVisitor(ctx).visit(ctx);
-    this.typeEnv = this.typeEnv.extend(scanRes);
-
-    const resType: RustLikeType = this.visit(ctx.stmt_list());
-    if (!typeEqual(resType, UNIT_TYPE))
-      throw new Error("Program returned non-unit type");
-    return UNIT_TYPE; // All programs are statement lists, and statements all return Unit type 
+    if (ctx.block_stmt() !== null) {
+      const resType: RustLikeType = this.visit(ctx.block_stmt());
+      if (!typeEqual(resType, UNIT_TYPE))
+        throw new Error("Program returned non-unit type");
+      return UNIT_TYPE;
+    } else {
+      const resType: RustLikeType = this.visit(ctx.block_expr());
+      return resType;
+    }
   }
 
   visitStmt_list(ctx: Stmt_listContext): RustLikeType {
@@ -242,7 +244,8 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   }
 
   visitBlock_expr(ctx: Block_exprContext): RustLikeType {
-    this.typeEnv = this.typeEnv.extend(null);
+    const scanRes: ScanResult = new ScopedScannerVisitor(ctx).visit(ctx);
+    this.typeEnv = this.typeEnv.extend(scanRes);
     this.visit(ctx.stmt_list()); // Visit all statements
     const exprType = this.visit(ctx.expr()); // visit the final expression
     this.typeEnv = this.typeEnv.parent;
@@ -529,7 +532,8 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   }
 
   visitBlock_stmt(ctx: Block_stmtContext): RustLikeType {
-    this.typeEnv = this.typeEnv.extend(null);
+    const scanRes: ScanResult = new ScopedScannerVisitor(ctx).visit(ctx);
+    this.typeEnv = this.typeEnv.extend(scanRes);
     this.visit(ctx.stmt_list());
     this.typeEnv = this.typeEnv.parent;
     return UNIT_TYPE;

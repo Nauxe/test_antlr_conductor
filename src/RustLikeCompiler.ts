@@ -42,8 +42,7 @@ const OP_TO_BYTE: Record<string, Bytecode> = {
 
 export class RustLikeCompilerVisitor
   extends AbstractParseTreeVisitor<Item>
-  implements RustLikeVisitor<Item>
-{
+  implements RustLikeVisitor<Item> {
   private heap = new Heap(2048);
   /** final byte-code output for the VM */
   public instructions: Inst[] = [];
@@ -61,7 +60,7 @@ export class RustLikeCompilerVisitor
   /* ─────────── Top-level ─────────── */
 
   visitProg(ctx: ProgContext): Item {
-    this.visit(ctx.stmt_list());
+    this.visit(ctx.block_expr() !== null ? ctx.block_expr() : ctx.block_stmt());
     this.instructions.push(new Inst(Bytecode.DONE));
     return this.defaultResult();
   }
@@ -98,23 +97,23 @@ export class RustLikeCompilerVisitor
   visitFn_decl(ctx: Fn_declContext): Item {
     try {
       const fnName = ctx.IDENTIFIER().getText();
-      
+
       // Check that the function has a type
       if (!ctx.type()) {
         throw new Error(`Function ${fnName} must have a return type`);
       }
-      
+
       // Explicitly check that the function has a body according to the grammar
       if (!ctx.block_expr()) {
         throw new Error(`Function ${fnName} must have a body`);
       }
-      
+
       const block = ctx.block_expr();
-      
+
       // Get parameter names and types
       const paramNames: string[] = [];
       const paramTypes: Item[] = [];
-      
+
       try {
         if (ctx.param_list_opt() && ctx.param_list_opt().param_list()) {
           const params = ctx.param_list_opt().param_list().param();
@@ -135,7 +134,7 @@ export class RustLikeCompilerVisitor
 
       // Scan the function body to get captured variables
       const scanRes = new ScopedScannerVisitor(block).visit(block);
-      
+
       // Create closure type
       const closureType = new Item(Tag.CLOSURE, 0, {
         captureNames: scanRes.names,
@@ -178,7 +177,7 @@ export class RustLikeCompilerVisitor
           if (stmts[i]) this.visit(stmts[i]);
         }
       }
-      
+
       // Compile the expression at the end of the block
       if (block.expr()) {
         this.visit(block.expr());
@@ -190,7 +189,7 @@ export class RustLikeCompilerVisitor
       // Exit function scope and return
       this.instructions.push(new Inst(Bytecode.EXIT_SCOPE));
       this.instructions.push(new Inst(Bytecode.RET));
-      
+
       return this.defaultResult();
     } catch (error) {
       console.error("Error in function declaration:", error);
@@ -221,7 +220,7 @@ export class RustLikeCompilerVisitor
   visitBlock_stmt(ctx: Block_stmtContext): Item {
     // Visit all statements
     ctx.stmt_list().stmt().forEach((stmt) => this.visit(stmt));
-    
+
     // Return unit type for block statements
     return this.defaultResult();
   }
@@ -418,7 +417,7 @@ export class RustLikeCompilerVisitor
       // Handle unary operators including ref and deref
       const op = ctx.getChild(0).getText();
       const expr = ctx.getChild(1) as ExprContext;
-      
+
       if (op === '&') {
         this.visit(expr);
         this.instructions.push(new Inst(Bytecode.REF));
@@ -429,7 +428,7 @@ export class RustLikeCompilerVisitor
         return this.defaultResult();
       }
     }
-    
+
     if (ctx.getChildCount() === 3) {
       const lhs = ctx.getChild(0) as ExprContext;
       const opTxt = ctx.getChild(1).getText();
@@ -456,7 +455,7 @@ export class RustLikeCompilerVisitor
           if (stmts[i]) this.visit(stmts[i]);
         }
       }
-      
+
       // Visit the final expression if it exists
       if (ctx.expr()) {
         return this.visit(ctx.expr());
@@ -474,44 +473,44 @@ export class RustLikeCompilerVisitor
   visitIf_expr(ctx: If_exprContext): Item {
     // Evaluate condition
     this.visit(ctx.expr());
-    
+
     // Jump if false to else branch
     const jof = new Inst(Bytecode.JOF, 0);
     this.instructions.push(jof);
-    
+
     // Compile then branch
     const thenResult = this.visit(ctx.block_expr()[0]);
-    
+
     // Jump over else branch
     const goto = new Inst(Bytecode.GOTO, 0);
     this.instructions.push(goto);
-    
+
     // Patch jump if false to else branch
     jof.operand = this.instructions.length;
-    
+
     // Compile else branch
     const elseResult = this.visit(ctx.block_expr()[1]);
-    
+
     // Patch jump over else branch
     goto.operand = this.instructions.length;
-    
+
     return thenResult; // Both branches should have same type
   }
 
   visitCallExpr(ctx: CallExprContext): Item {
     // Evaluate receiver
     this.visit(ctx.expr());
-    
+
     // Evaluate arguments in order
     if (ctx.arg_list_opt().expr() !== null) {
       ctx.arg_list_opt().expr().forEach((arg) => {
         this.visit(arg);
       });
     }
-    
+
     // Call the function
     this.instructions.push(new Inst(Bytecode.CALL));
-    
+
     return this.defaultResult();
   }
 
@@ -549,23 +548,23 @@ export class RustLikeCompilerVisitor
     // Evaluate start and end
     this.visit(ctx.u32_expr(0));
     this.visit(ctx.u32_expr(1));
-    
+
     // Create range
     this.instructions.push(new Inst(Bytecode.NEW_RANGE));
-    
+
     return this.defaultResult();
   }
 
   visitIndexExpr(ctx: IndexExprContext): Item {
     // Evaluate array/string
     this.visit(ctx.expr(0));
-    
+
     // Evaluate index
     this.visit(ctx.expr(1));
-    
+
     // Index into container
     this.instructions.push(new Inst(Bytecode.INDEX));
-    
+
     return this.defaultResult();
   }
 }

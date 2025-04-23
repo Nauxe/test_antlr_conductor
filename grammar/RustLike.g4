@@ -2,7 +2,8 @@ grammar RustLike;
 
 // ─── Entry Point ─────────────────────────────────────────────────────────────
 prog
-    : stmt_list EOF
+    : block_expr EOF
+    | block_stmt EOF
     ;
 
 // ─── Statements ──────────────────────────────────────────────────────────────
