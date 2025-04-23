@@ -225,52 +225,74 @@ export class RustLikeVirtualMachine {
         throw new Error(`Unbound primitive symbol: ${name}`);
       }
       case Bytecode.CALL: {
-        // Current closure implementation assumes no names are declared within closures themselves
-        // ^ This is related to one TODO below
-
-        const fnItem = this.OS.pop()!;
-        if (fnItem.tag !== Tag.CAPTURED_CLOSURE) {
-          throw new Error("CALL expects a closure");
+        try {
+          if (this.OS.length === 0) {
+            throw new Error("Stack underflow: Cannot call with empty stack");
+          }
+          
+          const fnItem = this.OS[this.OS.length - 1];
+          if (!fnItem || fnItem.tag !== Tag.CLOSURE) {
+            throw new Error(`Cannot call non-function value: ${fnItem ? Tag[fnItem.tag] : 'undefined'}`);
+          }
+          
+          const closureData = this.heap.get_data(fnItem);
+          if (!closureData || typeof closureData === 'string') {
+            throw new Error("Cannot read function closure data");
+          }
+          
+          // Now closureData is the value from heap
+          const closureValue = closureData as CapturedClosureValue;
+          
+          const numParams = closureValue.paramNames.length;
+          if (this.OS.length < numParams + 1) {
+            throw new Error(`Not enough arguments for function call: expected ${numParams}, got ${this.OS.length - 1}`);
+          }
+          
+          // Save current environment and PC
+          const returnPC = this.PC;
+          const oldEnv = this.E;
+          
+          // Pop arguments and the function
+          const args: Item[] = [];
+          for (let i = 0; i < numParams; i++) {
+            args.unshift(this.OS.pop()!); // Get in reverse order
+          }
+          this.OS.pop(); // Remove function
+          
+          // Create new frame for return
+          const frame: Frame = {
+            __return_pc: returnPC,
+            __old_env: oldEnv,
+            bindings: new Map()
+          };
+          this.RTS.push(frame);
+          
+          // Create new environment bindings
+          const allBindings = new Map<string, Item>();
+          
+          // Add captured variables
+          for (const [name, value] of closureValue.capturedVars.entries()) {
+            allBindings.set(name, value);
+          }
+          
+          // Add parameters
+          for (let i = 0; i < numParams; i++) {
+            allBindings.set(closureValue.paramNames[i], args[i]);
+          }
+          
+          // Create and set new environment
+          this.E = JS_value_to_Item(this.heap, {
+            parentAddr: oldEnv.value,
+            bindings: allBindings
+          });
+          
+          // Jump to function body
+          this.PC = closureValue.funcAddr - 1; // -1 because PC gets incremented after each step
+          
+        } catch (error) {
+          console.error("Error in CALL instruction:", error);
+          throw error;
         }
-
-        const { funcAddr, capturedVars, paramNames } = fnItem.value as CapturedClosureValue;
-
-        // Pop args in reverse order
-        const args: Item[] = [];
-        for (let i = 0; i < paramNames.length; i++) {
-          args.unshift(this.OS.pop()!); // reverse order
-        }
-
-        const allBindings = new Map<string, Item>();
-
-        // Insert captures into newBindings
-        for (const [name, item] of capturedVars.entries()) {
-          allBindings.set(name, item);
-        }
-
-        // Insert args into newBindings
-        for (let i = 0; i < paramNames.length; i++) {
-          allBindings.set(paramNames[i], args[i]);
-        }
-
-        // Create new frame
-        const newFrame: Frame = {
-          __return_pc: this.PC + 1,
-          __old_env: this.E,
-          bindings: allBindings
-        };
-
-        // Push frame onto RTS
-        this.RTS.push(newFrame);
-
-        // Set new environment
-        this.E = JS_value_to_Item(this.heap, {
-          parentAddr: this.E.value,
-          bindings: allBindings
-        });
-
-        // Jump to function
-        this.PC = funcAddr - 1; // -1 since PC is incremented every step
         break;
       }
       case Bytecode.ENTER_SCOPE: {

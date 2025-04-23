@@ -108,59 +108,84 @@ export class RustLikeCompilerVisitor
     // Get parameter names and types
     const paramNames: string[] = [];
     const paramTypes: Item[] = [];
-    if (ctx.param_list_opt().param_list()) {
-      ctx.param_list_opt().param_list().param().forEach((param) => {
-        paramNames.push(param.IDENTIFIER().getText());
-        paramTypes.push(new Item(Tag.UNIT, 0, 0)); // TODO: Parse actual types
-      });
+    
+    try {
+      if (ctx.param_list_opt() && ctx.param_list_opt().param_list()) {
+        const params = ctx.param_list_opt().param_list().param();
+        if (params) {
+          params.forEach((param) => {
+            paramNames.push(param.IDENTIFIER().getText());
+            paramTypes.push(new Item(Tag.UNIT, 0, 0)); // TODO: Parse actual types
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Error parsing parameters:", error);
+      throw new Error(`Error in parameter list for function ${fnName}`);
     }
 
-    // Scan the function body to get captured variables
-    const scanRes = new ScopedScannerVisitor(block).visit(block);
-    
-    // Create closure type
-    const closureType = new Item(Tag.CLOSURE, 0, {
-      captureNames: scanRes.names,
-      captureTypes: scanRes.types,
-      paramNames: paramNames,
-      paramTypes: paramTypes,
-      retType: new Item(Tag.UNIT, 0, 0), // TODO: Parse return type
-    });
+    try {
+      // Scan the function body to get captured variables
+      const scanRes = new ScopedScannerVisitor(block).visit(block);
+      
+      // Create closure type
+      const closureType = new Item(Tag.CLOSURE, 0, {
+        captureNames: scanRes.names,
+        captureTypes: scanRes.types,
+        paramNames: paramNames,
+        paramTypes: paramTypes,
+        retType: new Item(Tag.UNIT, 0, 0), // TODO: Parse return type
+      });
 
-    // Declare the function
-    this.instructions.push(
-      new Inst(Bytecode.DECL, {
-        name: fnName,
-        rustLikeType: closureType,
-      })
-    );
-
-    // Store current instruction pointer for the function
-    const fnStart = this.instructions.length;
-    this.instructions.push(new Inst(Bytecode.LDCI, fnStart));
-    this.instructions.push(new Inst(Bytecode.ASSIGN, fnName));
-
-    // Enter function scope
-    this.instructions.push(new Inst(Bytecode.ENTER_SCOPE, scanRes.names.length + paramNames.length));
-
-    // Bind parameters
-    paramNames.forEach((name) => {
+      // Declare the function
       this.instructions.push(
         new Inst(Bytecode.DECL, {
-          name,
-          rustLikeType: new Item(Tag.UNIT, 0, 0), // TODO: Use actual param types
+          name: fnName,
+          rustLikeType: closureType,
         })
       );
-    });
 
-    // Compile function body
-    const stmts = block.stmt_list().stmt();
-    stmts.forEach((s) => this.visit(s));
-    this.visit(block.expr());
+      // Store current instruction pointer for the function
+      const fnStart = this.instructions.length;
+      this.instructions.push(new Inst(Bytecode.LDCI, fnStart));
+      this.instructions.push(new Inst(Bytecode.ASSIGN, fnName));
 
-    // Exit function scope and return
-    this.instructions.push(new Inst(Bytecode.EXIT_SCOPE));
-    this.instructions.push(new Inst(Bytecode.RET));
+      // Enter function scope
+      this.instructions.push(new Inst(Bytecode.ENTER_SCOPE, scanRes.names.length + paramNames.length));
+
+      // Bind parameters
+      paramNames.forEach((name) => {
+        this.instructions.push(
+          new Inst(Bytecode.DECL, {
+            name,
+            rustLikeType: new Item(Tag.UNIT, 0, 0), // TODO: Use actual param types
+          })
+        );
+      });
+
+      // Compile function body
+      if (block && block.stmt_list() && block.stmt_list().stmt()) {
+        const stmts = block.stmt_list().stmt();
+        stmts.forEach((s) => {
+          if (s) this.visit(s);
+        });
+      }
+      
+      if (block && block.expr()) {
+        this.visit(block.expr());
+      } else {
+        // If no expression, add a unit value
+        this.instructions.push(new Inst(Bytecode.LDCI, 0)); // UNIT value
+      }
+
+      // Exit function scope and return
+      this.instructions.push(new Inst(Bytecode.EXIT_SCOPE));
+      this.instructions.push(new Inst(Bytecode.RET));
+      
+    } catch (error) {
+      console.error("Error in function body compilation:", error);
+      throw new Error(`Error in function body for ${fnName}: ${error.message}`);
+    }
 
     return this.defaultResult();
   }
@@ -415,11 +440,26 @@ export class RustLikeCompilerVisitor
   }
 
   visitBlock_expr(ctx: Block_exprContext): Item {
-    // Visit all statements
-    ctx.stmt_list().stmt().forEach((stmt) => this.visit(stmt));
-    
-    // Visit the final expression
-    return this.visit(ctx.expr());
+    try {
+      // Visit all statements
+      if (ctx.stmt_list() && ctx.stmt_list().stmt()) {
+        ctx.stmt_list().stmt().forEach((stmt) => {
+          if (stmt) this.visit(stmt);
+        });
+      }
+      
+      // Visit the final expression
+      if (ctx.expr()) {
+        return this.visit(ctx.expr());
+      } else {
+        // No final expression, return unit
+        this.instructions.push(new Inst(Bytecode.LDCI, 0)); // UNIT value
+        return this.defaultResult();
+      }
+    } catch (error) {
+      console.error("Error in block expression:", error);
+      throw new Error(`Error in block expression: ${error.message}`);
+    }
   }
 
   visitIf_expr(ctx: If_exprContext): Item {

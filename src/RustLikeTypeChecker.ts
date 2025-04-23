@@ -223,11 +223,24 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   }
 
   visitBlock_expr(ctx: Block_exprContext): RustLikeType {
-    // Visit all statements
-    ctx.stmt_list().stmt().forEach((stmt) => this.visit(stmt));
-    
-    // Visit the final expression
-    return this.visit(ctx.expr());
+    try {
+      // Visit all statements
+      if (ctx.stmt_list() && ctx.stmt_list().stmt()) {
+        ctx.stmt_list().stmt().forEach((stmt) => {
+          if (stmt) this.visit(stmt);
+        });
+      }
+      
+      // Visit the final expression
+      if (ctx.expr()) {
+        return this.visit(ctx.expr());
+      } else {
+        return UNIT_TYPE;
+      }
+    } catch (error) {
+      console.error("Error in block expression type checking:", error);
+      throw new Error(`Error in block expression type checking: ${error.message}`);
+    }
   }
 
   visitBool_expr(ctx: Bool_exprContext): RustLikeType {
@@ -426,11 +439,20 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
     const fnRetType = parseType(ctx.type());
     let paramNames = [];
     let paramTypes = [];
-    if (ctx.param_list_opt().param_list() !== null) {
-      ctx.param_list_opt().param_list().param().forEach((param) => {
-        paramNames.push(param.IDENTIFIER().getText());
-        paramTypes.push(parseType(param.type()));
-      });
+    
+    try {
+      if (ctx.param_list_opt() && ctx.param_list_opt().param_list()) {
+        const params = ctx.param_list_opt().param_list().param();
+        if (params) {
+          params.forEach((param) => {
+            paramNames.push(param.IDENTIFIER().getText());
+            paramTypes.push(parseType(param.type()));
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Error parsing parameters in type checker:", error);
+      throw new Error(`Error in parameter list type checking for function ${fnName}`);
     }
 
     // Check that the function has a body
@@ -445,29 +467,36 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
       types: paramTypes
     });
 
-    // Type check the function body
-    const bodyType = this.visit(ctx.block_expr());
+    try {
+      // Type check the function body
+      const bodyType = this.visit(ctx.block_expr());
 
-    // Restore the old environment
-    this.typeEnv = oldEnv;
+      // Restore the old environment
+      this.typeEnv = oldEnv;
 
-    // Check that the body type matches the return type
-    if (!typeEqual(bodyType, fnRetType)) {
-      throw new Error(`Function ${fnName} body type ${bodyType.tag} does not match return type ${fnRetType.tag}`);
+      // Check that the body type matches the return type
+      if (!typeEqual(bodyType, fnRetType)) {
+        throw new Error(`Function ${fnName} body type ${bodyType.tag} does not match return type ${fnRetType.tag}`);
+      }
+
+      // Add the function to the environment
+      const fnType: FnType = {
+        tag: Tag.CLOSURE,
+        captureNames: [], // To be initialized in other visitors 
+        captureTypes: [], // To be initalized in other visitors
+        paramNames: paramNames,
+        paramTypes: paramTypes,
+        retType: fnRetType,
+      };
+      this.typeEnv.types.set(fnName, fnType);
+
+      return UNIT_TYPE;
+    } catch (error) {
+      // Restore environment in case of error
+      this.typeEnv = oldEnv;
+      console.error("Error in function body type checking:", error);
+      throw new Error(`Error type checking function body for ${fnName}: ${error.message}`);
     }
-
-    // Add the function to the environment
-    const fnType: FnType = {
-      tag: Tag.CLOSURE,
-      captureNames: [], // To be initialized in other visitors 
-      captureTypes: [], // To be initalized in other visitors
-      paramNames: paramNames,
-      paramTypes: paramTypes,
-      retType: fnRetType,
-    };
-    this.typeEnv.types.set(fnName, fnType);
-
-    return UNIT_TYPE;
   }
 
   visitPrint_stmt(ctx: Print_stmtContext): RustLikeType {
