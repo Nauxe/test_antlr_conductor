@@ -1,4 +1,4 @@
-// src/RustLikeCompilerVisitor.ts
+// eslint-disable @typescript-eslint/no-unused-vars
 import { AbstractParseTreeVisitor } from "antlr4ng";
 import {
   ProgContext,
@@ -17,26 +17,39 @@ import {
   U32_exprContext,
   Str_exprContext,
   Bool_exprContext,
-  Expr_stmtContext          //  ←  new import for “expr;”
+  Expr_stmtContext,
 } from "./parser/grammar/RustLikeParser";
 import { RustLikeVisitor } from "./parser/grammar/RustLikeVisitor";
 import { Heap, Item, Tag } from "./Heap";
 import { Bytecode, Inst } from "./RustLikeVirtualMachine";
+
+/*  map every infix operator to the corresponding byte-code instruction  */
+const OP_TO_BYTE: Record<string, Bytecode> = {
+  "+": Bytecode.PLUS,
+  "-": Bytecode.MINUS,
+  "*": Bytecode.TIMES,
+  "/": Bytecode.DIV,
+  "%": Bytecode.MOD,
+  "<": Bytecode.LT,
+  "<=": Bytecode.LE,
+  ">=": Bytecode.GE,
+  "==": Bytecode.EQ,
+  "!=": Bytecode.NE,
+};
 
 export class RustLikeCompilerVisitor
   extends AbstractParseTreeVisitor<Item>
   implements RustLikeVisitor<Item>
 {
   private heap = new Heap(2048);
-
-  /** final output for the VM */
+  /** final byte-code output for the VM */
   public instructions: Inst[] = [];
 
   protected defaultResult(): Item {
     return new Item(Tag.UNIT, 0, 0);
   }
 
-  /* ─────────── Top level ─────────── */
+  /* ─────────── Top-level ─────────── */
 
   visitProg(ctx: ProgContext): Item {
     this.visit(ctx.stmt_list());
@@ -45,25 +58,39 @@ export class RustLikeCompilerVisitor
   }
 
   visitStmt_list(ctx: Stmt_listContext): Item {
-    for (const s of ctx.stmt()) this.visit(s);
+    ctx.stmt().forEach((s) => this.visit(s));
     return this.defaultResult();
   }
 
   /* ─────────── Statements ─────────── */
 
-  // let x : T = expr;
   visitDecl(ctx: DeclContext): Item {
-    this.visit(ctx.expr());
-    this.instructions.push(new Inst(Bytecode.POP));
+    /* grammar:  let IDENTIFIER ( : type )? ( = expr )? ; */
+
+    const varName = ctx.IDENTIFIER().getText();
+    /* allocate a slot */
+    this.instructions.push(
+      new Inst(Bytecode.DECL, {
+        name: varName,
+        rustLikeType: new Item(Tag.UNIT, 0, 0), // placeholder type info
+      })
+    );
+
+    if (ctx.expr()) {
+      /* evaluate RHS, then store it */
+      this.visit(ctx.expr()!);
+      this.instructions.push(new Inst(Bytecode.ASSIGN, varName));
+    }
+    /* nothing left on the stack */
     return this.defaultResult();
   }
 
   /* functions are recognised but not compiled yet */
-  visitFn_decl(_ctx: Fn_declContext): Item {
+  visitFn_decl(_: Fn_declContext): Item {
     return this.defaultResult();
   }
 
-  /* print!(expr);  ->  expr · LDPS "print!" · CALL */
+  /*  print!(expr);   ->   expr  ·  LDPS "print!"  ·  CALL  */
   visitPrint_stmt(ctx: Print_stmtContext): Item {
     this.visit(ctx.expr());
     this.instructions.push(new Inst(Bytecode.LDPS, "print!"));
@@ -73,26 +100,31 @@ export class RustLikeCompilerVisitor
 
   /* while (cond) { body } */
   visitWhile_loop(ctx: While_loopContext): Item {
-    const start = this.instructions.length;
-    this.visit(ctx.expr());                       // condition
+    const top = this.instructions.length;
+    this.visit(ctx.expr()); // condition
     const jof = new Inst(Bytecode.JOF, 0);
     this.instructions.push(jof);
-    this.visit(ctx.block());                      // body
-    this.instructions.push(new Inst(Bytecode.GOTO, start));
-    jof.operand = this.instructions.length;       // patch jump target
+    this.visit(ctx.block());
+    this.instructions.push(new Inst(Bytecode.GOTO, top));
+    jof.operand = this.instructions.length;
     return this.defaultResult();
   }
 
   visitBlock(ctx: BlockContext): Item {
-    this.visit(ctx.stmt_list());
+    /* each statement* except the last behaves as usual */
+    const stmts = ctx.stmt_list().stmt();
+    stmts.slice(0, -1).forEach((s) => this.visit(s));
+
+    /* the last statement decides the block value           */
+    if (stmts.length) this.visit(stmts[stmts.length - 1]);
+    else this.instructions.push(new Inst(Bytecode.LDCB, true)); // empty block ⇒ true
+
     return this.defaultResult();
   }
 
-  /* new: expression used as a *statement*  ───────── */
+  /* expression used *as* a statement     */
   visitExpr_stmt(ctx: Expr_stmtContext): Item {
     this.visit(ctx.expr());
-    /*  every expression statement must leave the stack
-        exactly as it was before it ran                       */
     this.instructions.push(new Inst(Bytecode.POP));
     return this.defaultResult();
   }
@@ -108,17 +140,16 @@ export class RustLikeCompilerVisitor
     if (ctx.str_expr()) return this.visit(ctx.str_expr()!);
     if (ctx.bool_expr()) return this.visit(ctx.bool_expr()!);
 
-    /*  If the lexer sent “true” / “false” out as IDENTIFIER
-        treat it as a literal rather than a variable name     */
+    /* treat “true / false” identifiers as literals         */
     if (ctx.IDENTIFIER()) {
       const name = ctx.IDENTIFIER()!.getText();
       if (name === "true" || name === "false") {
         this.instructions.push(
           new Inst(Bytecode.LDCB, name === "true")
         );
-        return this.defaultResult();
+      } else {
+        this.instructions.push(new Inst(Bytecode.LDHS, name));
       }
-      this.instructions.push(new Inst(Bytecode.LDHS, name));
       return this.defaultResult();
     }
 
@@ -126,22 +157,27 @@ export class RustLikeCompilerVisitor
     return this.defaultResult();
   }
 
-  /* literals */
+  /* ───── literals ───── */
   visitU32_expr(ctx: U32_exprContext): Item {
-    const val = parseInt(ctx.U32().getText(), 10);
-    this.instructions.push(new Inst(Bytecode.LDCI, val));
+    this.instructions.push(
+      new Inst(Bytecode.LDCI, parseInt(ctx.U32().getText(), 10))
+    );
     return this.defaultResult();
   }
 
   visitStr_expr(ctx: Str_exprContext): Item {
-    const txt = ctx.STRING().map(t => t.getText().slice(1, -1)).join("");
+    const txt = ctx
+      .STRING()
+      .map((t) => t.getText().slice(1, -1))
+      .join("");
     this.instructions.push(new Inst(Bytecode.LDCS, txt));
     return this.defaultResult();
   }
 
   visitBool_expr(ctx: Bool_exprContext): Item {
-    const v = ctx.BOOL().getText() === "true";
-    this.instructions.push(new Inst(Bytecode.LDCB, v));
+    this.instructions.push(
+      new Inst(Bytecode.LDCB, ctx.BOOL().getText() === "true")
+    );
     return this.defaultResult();
   }
 
@@ -152,13 +188,13 @@ export class RustLikeCompilerVisitor
     return this.defaultResult();
   }
 
-  /* arithmetic +  *  (extend as needed) */
+  /* arithmetic / comparison  */
   visitBinaryOpExpr(ctx: BinaryOpExprContext): Item {
     this.visit(ctx.expr(0));
     this.visit(ctx.expr(1));
-    this.instructions.push(
-      new Inst(ctx.INT_OP().getText() === "*" ? Bytecode.TIMES : Bytecode.PLUS)
-    );
+
+    const op = ctx.INT_OP().getText(); // rule covers + - * / %
+    this.instructions.push(new Inst(OP_TO_BYTE[op]));
     return this.defaultResult();
   }
 
@@ -172,30 +208,29 @@ export class RustLikeCompilerVisitor
     return this.defaultResult();
   }
 
-  /*  ───────── fall-back ─────────
-      The original implementation just delegated to `visitChildren`,
-      which meant that “1 + 2” at the top level *never* generated a
-      PLUS instruction when the grammar did not create a
-      BinaryOpExprContext node.
-      We patch that here by detecting the simple
-      3-child pattern “expr op expr”.                             */
+  /*  catch-all infix expression that the grammar
+      may generate for comparisons and remaining ops       */
   visitExpr(ctx: ExprContext): Item {
     if (ctx.getChildCount() === 3) {
+      const lhs = ctx.getChild(0) as ExprContext;
       const opTxt = ctx.getChild(1).getText();
-      if (opTxt === "+") {
-        this.visit(ctx.getChild(0) as ExprContext);
-        this.visit(ctx.getChild(2) as ExprContext);
-        this.instructions.push(new Inst(Bytecode.PLUS));
+      const rhs = ctx.getChild(2) as ExprContext;
+
+      if (OP_TO_BYTE[opTxt]) {
+        this.visit(lhs);
+        this.visit(rhs);
+        this.instructions.push(new Inst(OP_TO_BYTE[opTxt]));
         return this.defaultResult();
       }
-      if (opTxt === "*") {
-        this.visit(ctx.getChild(0) as ExprContext);
-        this.visit(ctx.getChild(2) as ExprContext);
-        this.instructions.push(new Inst(Bytecode.TIMES));
+
+      /* “>” is compiled as the reversed <  */
+      if (opTxt === ">") {
+        this.visit(rhs);
+        this.visit(lhs);
+        this.instructions.push(new Inst(Bytecode.LT));
         return this.defaultResult();
       }
     }
-    /*  fall back to the original behaviour  */
     return this.visitChildren(ctx);
   }
 }
