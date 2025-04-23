@@ -2,7 +2,7 @@ import { AbstractParseTreeVisitor, ParserRuleContext, ParseTree, TerminalNode } 
 import { Tag } from "./Heap";
 import { RustLikeVisitor } from "./parser/grammar/RustLikeVisitor";
 import { Frame } from "./RustLikeVirtualMachine";
-import { BinaryOpExprContext, Block_exprContext, Block_stmtContext, Bool_exprContext, Break_stmtContext, CallExprContext, Continue_stmtContext, DeclContext, Expr_stmtContext, ExprContext, Fn_declContext, If_exprContext, If_stmtContext, IndexExprContext, Print_stmtContext, ProgContext, RustLikeParser, Str_exprContext, TypeContext, U32_exprContext, UnaryExprContext, While_loopContext } from "./parser/grammar/RustLikeParser";
+import { BinaryOpExprContext, Block_exprContext, Block_stmtContext, Bool_exprContext, Break_stmtContext, CallExprContext, Continue_stmtContext, DeclContext, Expr_stmtContext, ExprContext, Fn_declContext, If_exprContext, If_stmtContext, IndexExprContext, LogicalExprContext, Print_stmtContext, ProgContext, RustLikeParser, Str_exprContext, TypeContext, U32_exprContext, UnaryExprContext, While_loopContext } from "./parser/grammar/RustLikeParser";
 import { types } from "util";
 
 type UnitType = { tag: Tag.UNIT };
@@ -213,7 +213,11 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
 
   // Unary boolean op (Only possible operation is !)
   visitUnaryExpr(ctx: UnaryExprContext): RustLikeType {
-    return UNIT_TYPE; // temporary
+    let type1 = this.visit(ctx.expr());
+    if (!typeEqual(type1, BOOL_TYPE))
+      throw new Error(`Expected bool for ! operator, got ${type1}.`);
+    type1 = type1 as BoolType;
+    return { tag: type1.tag, val: !type1.val };
   }
 
   // Binary op
@@ -222,7 +226,7 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
     let type2 = this.visit(ctx.expr()[1]);
     const op = ctx.INT_OP().getText();
     if (!typeEqual(type1, type2))
-      throw new Error(`Mismatched types in binary operation.`);
+      throw new Error(`Mismatched types in integer binary operation.`);
 
     if (typeEqual(type1, U32_TYPE)) {
       // Safe to cast now
@@ -276,12 +280,35 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
         case '>=':
           return { tag: Tag.BOOLEAN, val: type1.val >= type2.val };
         default:
-          throw new Error(`Expected u32 types for binary operation ${op} got ${type1} and ${type2}.`);
+          throw new Error(`Expected u32 types for binary operation ${op}, got ${type1} and ${type2}.`);
       }
     } else {
       throw new Error(`Expected u32 or boolean types for binary operation ${op} got ${type1} and ${type2}.`);
     }
   }
+
+  visitLogicalExpr(ctx: LogicalExprContext): RustLikeType {
+    let type1 = this.visit(ctx.expr()[0]);
+    let type2 = this.visit(ctx.expr()[1]);
+    const op = ctx.BOOL_BINOP().getText();
+    if (!typeEqual(type1, type2))
+      throw new Error(`Mismatched types in logical binary operation.`);
+
+    if (!typeEqual(type1, BOOL_TYPE))
+      throw new Error(`Expected bool types for binary operation ${op}, got ${type1} and ${type2}.`);
+
+    // Safe to cast now
+    type1 = type1 as BoolType;
+    type2 = type2 as BoolType;
+
+    switch (op) {
+      case '||':
+        return { tag: Tag.BOOLEAN, val: type1.val || type2.val };
+      case '&&':
+        return { tag: Tag.BOOLEAN, val: type1.val && type2.val };
+    }
+  }
+
 
   visitCallExpr(ctx: CallExprContext): RustLikeType {
     const fnName: string = ctx.expr().getText();
