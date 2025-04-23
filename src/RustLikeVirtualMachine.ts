@@ -431,9 +431,9 @@ export class RustLikeVirtualMachine {
         this.E = frame.__old_env;
 
         // Jump back to caller
-        this.PC = frame.__return_pc - 1; // -1 since PC is incremented every step
+        this.PC = frame.__return_pc;
 
-        // Push return value
+        // Push return value back onto the stack
         this.OS.push(retVal);
         break;
       }
