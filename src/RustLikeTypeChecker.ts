@@ -119,24 +119,6 @@ export class ScopedScannerVisitor extends AbstractParseTreeVisitor<ScanResult> i
     return this.visitChildren(ctx);
   }
 
-  visitIf_stmt(ctx: If_stmtContext): ScanResult {
-    if (ctx !== this.scanContext)
-      return this.defaultResult(); // Stop scanning, no longer in scope
-    return this.visitChildren(ctx);
-  }
-
-  visitIf_expr(ctx: If_exprContext): ScanResult {
-    if (ctx !== this.scanContext)
-      return this.defaultResult(); // Stop scanning, no longer in scope
-    return this.visitChildren(ctx);
-  }
-
-  visitWhile_loop(ctx: While_loopContext): ScanResult {
-    if (ctx !== this.scanContext)
-      return this.defaultResult(); // Stop scanning, no longer in scope
-    return this.visitChildren(ctx);
-  }
-
   visitDecl(ctx: DeclContext): ScanResult {
     const name = ctx.IDENTIFIER().getText();
     const type = this.parseType(ctx.type());
