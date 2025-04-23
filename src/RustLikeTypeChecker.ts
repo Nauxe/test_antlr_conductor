@@ -128,7 +128,12 @@ export class ScopedScannerVisitor extends AbstractParseTreeVisitor<ScanResult> i
   visitBlock_stmt(ctx: Block_stmtContext): ScanResult {
     if (ctx !== this.scanContext)
       return this.defaultResult(); // Stop scanning, no longer in scope
-    return this.visitChildren(ctx);
+
+    const stmtList = ctx.stmt_list();
+    if (stmtList && stmtList.stmt()) {
+      return this.visit(stmtList);
+    }
+    return this.defaultResult();
   }
 
 
