@@ -207,16 +207,23 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
 
   visitProg(ctx: ProgContext): RustLikeType {
     try {
+      console.log("Visiting program:", ctx.getText());
+      console.log("Block statement:", ctx.block_stmt()?.getText());
+      console.log("Block expression:", ctx.block_expr()?.getText());
+
       // Create a new scope for the program
       const scanRes: ScanResult = new ScopedScannerVisitor(ctx).visit(ctx);
       this.typeEnv = this.typeEnv.extend(scanRes);
 
       let result: RustLikeType;
-      if (ctx.block_stmt() !== null) {
+      if (ctx.block_stmt()) {
+        console.log("Found block statement");
         result = this.visit(ctx.block_stmt());
-      } else if (ctx.block_expr() !== null) {
+      } else if (ctx.block_expr()) {
+        console.log("Found block expression");
         result = this.visit(ctx.block_expr());
       } else {
+        console.log("No block found");
         throw new Error("Program must have either a block statement or block expression");
       }
 
@@ -587,6 +594,9 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
 
   visitBlock_stmt(ctx: Block_stmtContext): RustLikeType {
     try {
+      console.log("Visiting block statement:", ctx.getText());
+      console.log("Statement list:", ctx.stmt_list()?.getText());
+
       // Create a new scope for the block
       const scanRes: ScanResult = new ScopedScannerVisitor(ctx).visit(ctx);
       this.typeEnv = this.typeEnv.extend(scanRes);
@@ -594,9 +604,13 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
       // Visit all statements in the block
       if (ctx.stmt_list() && ctx.stmt_list().stmt()) {
         const stmts = ctx.stmt_list().stmt();
+        console.log("Number of statements:", stmts.length);
         for (let i = 0; i < stmts.length; i++) {
+          console.log("Visiting statement:", stmts[i].getText());
           this.visit(stmts[i]);
         }
+      } else {
+        console.log("No statements found in block");
       }
 
       // Exit block scope
