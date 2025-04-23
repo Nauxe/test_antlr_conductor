@@ -206,7 +206,7 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
     let predType = this.visit(ctx.expr());
 
     if (!typeEqual(predType, BOOL_TYPE))
-      throw new Error(`Expected boolean predicate for if statement.`);
+      throw new Error(`Expected boolean predicate for if expression.`);
 
     predType = predType as BoolType;
 
@@ -463,26 +463,48 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   }
 
   visitPrint_stmt(ctx: Print_stmtContext): RustLikeType {
+    const exprType = this.visit(ctx.expr());
+    if (!typeEqual(exprType, STRING_TYPE))
+      throw new Error(`print! expected String, got ${exprType}.`);
+
     return UNIT_TYPE;
   }
 
   visitIf_stmt(ctx: If_stmtContext): RustLikeType {
+    let predType = this.visit(ctx.expr());
+
+    if (!typeEqual(predType, BOOL_TYPE))
+      throw new Error(`Expected boolean predicate for if statement.`);
+
+    this.visit(ctx.block_stmt()[0]);
+    this.visit(ctx.block_stmt()[1]);
+
+    // No need to check cons and alt, stmts produce unit
     return UNIT_TYPE;
   }
 
   visitWhile_loop(ctx: While_loopContext): RustLikeType {
+    let predType = this.visit(ctx.expr());
+
+    if (!typeEqual(predType, BOOL_TYPE))
+      throw new Error(`Expected boolean predicate for while loop.`);
+
+    this.visit(ctx.block_stmt());
     return UNIT_TYPE;
   }
 
   visitContinue_stmt(ctx: Continue_stmtContext): RustLikeType {
+    // TODO: Not implemented
     return UNIT_TYPE;
   }
 
   visitExpr_stmt(ctx: Expr_stmtContext): RustLikeType {
+    // TODO: Not implemented
     return UNIT_TYPE;
   }
 
   visitBlock_stmt(ctx: Block_stmtContext): RustLikeType {
+    this.visit(ctx.stmt_list());
     return UNIT_TYPE;
   }
 }
