@@ -258,7 +258,7 @@ export class RustLikeVirtualMachine {
           }
 
           // Save current environment and PC
-          const returnPC = this.PC;
+          const returnPC = this.PC + 1; // Save the next instruction after the call
           const oldEnv = this.E;
 
           // Pop arguments and the function
@@ -431,7 +431,7 @@ export class RustLikeVirtualMachine {
         this.E = frame.__old_env;
 
         // Jump back to caller
-        this.PC = frame.__return_pc;
+        this.PC = frame.__return_pc - 1; // -1 because PC gets incremented after each step
 
         // Push return value back onto the stack
         this.OS.push(retVal);
