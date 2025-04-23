@@ -71,7 +71,8 @@ export class RustLikeCompilerVisitor
     } else if (ctx.block_stmt()) {
       this.visit(ctx.block_stmt()!);
     }
-    // Emit DONE instruction to finish
+
+    // Add DONE instruction
     this.instructions.push(new Inst(Bytecode.DONE));
     return this.defaultResult();
   }
