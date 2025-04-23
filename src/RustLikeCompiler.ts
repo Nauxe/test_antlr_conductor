@@ -287,10 +287,13 @@ export class RustLikeCompilerVisitor
     return this.defaultResult();
   }
 
-  /* expression used *as* a statement     */
+  /* expression used *as* a statement */
   visitExpr_stmt(ctx: Expr_stmtContext): Item {
-    // Visit the expression but don't pop its result
+    // Visit the expression - this leaves its result on the stack
     this.visit(ctx.expr());
+    
+    // We intentionally do NOT pop the result off the stack
+    // This ensures the result is available for the final program output
     return this.defaultResult();
   }
 
@@ -569,7 +572,7 @@ export class RustLikeCompilerVisitor
 
   visitCallExpr(ctx: CallExprContext): Item {
     try {
-      // Visit the function expression
+      // Visit the function expression (an identifier that refers to a function)
       this.visit(ctx.expr());
 
       // Visit all arguments
@@ -580,9 +583,11 @@ export class RustLikeCompilerVisitor
         }
       }
 
-      // Call the function and keep the result on the stack
-      this.instructions.push(new Inst(Bytecode.CALL, ctx.arg_list_opt() ? ctx.arg_list_opt().expr().length : 0));
+      // Call the function with the number of arguments
+      const numArgs = ctx.arg_list_opt() ? ctx.arg_list_opt().expr().length : 0;
+      this.instructions.push(new Inst(Bytecode.CALL, numArgs));
 
+      // The result of the function call is now on the stack and available for the caller
       return this.defaultResult();
     } catch (error) {
       console.error("Error in function call:", error);

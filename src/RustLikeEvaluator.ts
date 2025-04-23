@@ -70,9 +70,10 @@ export class RustLikeEvaluator extends BasicEvaluator {
     }
 
     if (this.isDebug) {
-      this.conductor.sendOutput(`Compiled instructions: ${this.compilerVisitor.instructions.map(
-        inst => `\n[${Bytecode[inst.opcode].padEnd(7)} ${inst.operand ?? ""}]`)
-        }\n\n -------------------------- \n`);
+      const instructionList = this.compilerVisitor.instructions.map(
+        (inst, index) => `\n[${index}: ${Bytecode[inst.opcode].padEnd(7)} ${inst.operand ?? ""}]`
+      );
+      this.conductor.sendOutput(`Compiled instructions: ${instructionList}\n\n -------------------------- \n`);
     }
 
     // Run instructions on the virtual machine

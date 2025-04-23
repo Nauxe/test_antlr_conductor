@@ -96,14 +96,16 @@ export class RustLikeVirtualMachine {
   private step() {
     const inst = this.instrs[this.PC];
 
-    if (this.isDebug)
+    if (this.isDebug) {
+      const stackDisplay = this.OS.map(it =>
+        is_primitive(it.tag) ? it.value : `<${Tag[it.tag]}>`
+      ).join(" ");
+      
       this.pushTrace(
         `[${String(this.PC).padStart(3)}] ${Bytecode[inst.opcode].padEnd(7)} ${inst.operand ?? ""
-        }  OS→ ${this.OS.map(it =>
-          is_primitive(it.tag) ? it.value : `<${Tag[it.tag]}>`
-        ).join(" ")
-        }`
+        }  OS→ ${stackDisplay}`
       );
+    }
 
     switch (inst.opcode) {
       case Bytecode.NOP: {
@@ -201,11 +203,12 @@ export class RustLikeVirtualMachine {
           if (env.bindings.has(name)) {
             const item = env.bindings.get(name)!;
             this.OS.push(item); // Item may be primitive or heap allocated
-            break;
+            return;
           }
           envItem = addr_to_Item(this.heap, env.parentAddr);
         }
 
+        // If we reach here, symbol was not found
         throw new Error(`Unbound symbol in heap scope: ${name}`);
       }
       case Bytecode.LDPS: { // This should only be used to load closures! (uncaptured) 
@@ -553,7 +556,7 @@ export class RustLikeVirtualMachine {
     this.RTS.push(global_frame);
 
     // Main loop to step through program
-    while (this.instrs[this.PC].opcode != Bytecode.DONE) {
+    while (this.PC < this.instrs.length && this.instrs[this.PC].opcode != Bytecode.DONE) {
       this.step();
       this.PC += 1; // increment program counter
     }
@@ -564,7 +567,7 @@ export class RustLikeVirtualMachine {
     if (this.OS.length > 0) {
       const resultItem = this.OS[this.OS.length - 1];
       if (is_primitive(resultItem.tag)) {
-        // For primitive values, return them directly
+        // For primitive values, return them directly without JSON stringifying
         result.value = resultItem.value.toString();
       } else {
         // For heap-allocated values, convert to JS value
