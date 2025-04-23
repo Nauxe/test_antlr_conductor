@@ -188,7 +188,7 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
     const scanRes: ScanResult = new ScopedScannerVisitor(ctx).visit(ctx);
     this.typeEnv = this.typeEnv.extend(scanRes);
 
-    const resType: RustLikeType = this.visitChildren(ctx);
+    const resType: RustLikeType = this.visit(ctx.stmt_list());
     if (!typeEqual(resType, UNIT_TYPE))
       throw new Error("Program returned non-unit type");
     return UNIT_TYPE; // All programs are statement lists, and statements all return Unit type 
