@@ -223,7 +223,10 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   }
 
   visitBlock_expr(ctx: Block_exprContext): RustLikeType {
-    this.visit(ctx.stmt_list());
+    // Visit all statements
+    ctx.stmt_list().stmt().forEach((stmt) => this.visit(stmt));
+    
+    // Visit the final expression
     return this.visit(ctx.expr());
   }
 
@@ -511,7 +514,10 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   }
 
   visitBlock_stmt(ctx: Block_stmtContext): RustLikeType {
-    this.visit(ctx.stmt_list());
+    // Visit all statements
+    ctx.stmt_list().stmt().forEach((stmt) => this.visit(stmt));
+    
+    // Return unit type for block statements
     return UNIT_TYPE;
   }
 }

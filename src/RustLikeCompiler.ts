@@ -150,14 +150,12 @@ export class RustLikeCompilerVisitor
     if (block instanceof Block_exprContext) {
       // For block expressions, visit the statements and final expression
       const stmts = block.stmt_list().stmt();
-      stmts.slice(0, -1).forEach((s) => this.visit(s));
-      if (stmts.length) {
-        this.visit(stmts[stmts.length - 1]);
-      }
+      stmts.forEach((s) => this.visit(s));
       this.visit(block.expr());
     } else {
       // For block statements, just visit the statements
-      this.visit(block);
+      const stmts = block.stmt_list().stmt();
+      stmts.forEach((s) => this.visit(s));
     }
 
     // Exit function scope and return
@@ -188,14 +186,10 @@ export class RustLikeCompilerVisitor
   }
 
   visitBlock_stmt(ctx: Block_stmtContext): Item {
-    /* each statement* except the last behaves as usual */
-    const stmts = ctx.stmt_list().stmt();
-    stmts.slice(0, -1).forEach((s) => this.visit(s));
-
-    /* the last statement decides the block value           */
-    if (stmts.length) this.visit(stmts[stmts.length - 1]);
-    else this.instructions.push(new Inst(Bytecode.LDCB, true)); // empty block ⇒ true
-
+    // Visit all statements
+    ctx.stmt_list().stmt().forEach((stmt) => this.visit(stmt));
+    
+    // Return unit type for block statements
     return this.defaultResult();
   }
 
@@ -421,20 +415,11 @@ export class RustLikeCompilerVisitor
   }
 
   visitBlock_expr(ctx: Block_exprContext): Item {
-    // Enter block scope
-    const scanRes = new ScopedScannerVisitor(ctx).visit(ctx);
-    this.instructions.push(new Inst(Bytecode.ENTER_SCOPE, scanRes.names.length));
-
-    // Visit statements
-    this.visit(ctx.stmt_list());
-
-    // Visit final expression
-    const result = this.visit(ctx.expr());
-
-    // Exit block scope
-    this.instructions.push(new Inst(Bytecode.EXIT_SCOPE));
-
-    return result;
+    // Visit all statements
+    ctx.stmt_list().stmt().forEach((stmt) => this.visit(stmt));
+    
+    // Visit the final expression
+    return this.visit(ctx.expr());
   }
 
   visitIf_expr(ctx: If_exprContext): Item {
