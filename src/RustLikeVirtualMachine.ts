@@ -558,18 +558,20 @@ export class RustLikeVirtualMachine {
       this.PC += 1; // increment program counter
     }
 
-    const resultItem: Item = this.OS.pop();
+    // Get the result from the operand stack
+    let result = { value: "()", debugTrace: this.trace.trc };
 
-    let result = { value: "()", debugTrace: this.trace.trc }; // Always return a value string as a result of execution
-
-    // Always return a string as a result of execution
-    if (!resultItem) { // Nothing on heap, return unit type
-      result.value = "()"; // Return unit type
-    } else if (is_primitive(resultItem.tag)) {
-      result.value = JSON.stringify(resultItem.value);
-    } else {
-      result.value = JSON.stringify(this.heap.addr_to_JS_value(resultItem.value));
+    if (this.OS.length > 0) {
+      const resultItem = this.OS[this.OS.length - 1];
+      if (is_primitive(resultItem.tag)) {
+        // For primitive values, return them directly
+        result.value = resultItem.value.toString();
+      } else {
+        // For heap-allocated values, convert to JS value
+        result.value = JSON.stringify(this.heap.addr_to_JS_value(resultItem.value));
+      }
     }
+
     return result;
   }
 
