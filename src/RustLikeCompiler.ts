@@ -147,7 +147,18 @@ export class RustLikeCompilerVisitor
     });
 
     // Compile function body
-    this.visit(block);
+    if (block instanceof Block_exprContext) {
+      // For block expressions, visit the statements and final expression
+      const stmts = block.stmt_list().stmt();
+      stmts.slice(0, -1).forEach((s) => this.visit(s));
+      if (stmts.length) {
+        this.visit(stmts[stmts.length - 1]);
+      }
+      this.visit(block.expr());
+    } else {
+      // For block statements, just visit the statements
+      this.visit(block);
+    }
 
     // Exit function scope and return
     this.instructions.push(new Inst(Bytecode.EXIT_SCOPE));
