@@ -75,7 +75,7 @@ export class RustLikeParser extends antlr.Parser {
 
     public static readonly literalNames = [
         null, "'let'", "':'", "'='", "';'", "'fn'", "'('", "')'", "'->'", 
-        "','", "'print'", "'break'", "'continue'", "'if'", "'else'", "'while'", 
+        "','", "'print!'", "'break'", "'continue'", "'if'", "'else'", "'while'", 
         "'{'", "'}'", "'['", "']'", "'..'", "'+'", "'()'", "'u32'", "'string'", 
         null, null, null, null, null, null, "'!'"
     ];
