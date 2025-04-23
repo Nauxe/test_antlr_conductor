@@ -231,19 +231,28 @@ export class RustLikeVirtualMachine {
           }
           
           const fnItem = this.OS[this.OS.length - 1];
-          if (!fnItem || fnItem.tag !== Tag.CLOSURE) {
+          if (!fnItem || (fnItem.tag !== Tag.CLOSURE && fnItem.tag !== Tag.CAPTURED_CLOSURE)) {
             throw new Error(`Cannot call non-function value: ${fnItem ? Tag[fnItem.tag] : 'undefined'}`);
           }
           
-          const closureData = this.heap.get_data(fnItem);
-          if (!closureData || typeof closureData === 'string') {
-            throw new Error("Cannot read function closure data");
+          let funcAddr: number;
+          let paramNames: string[];
+          let capturedVars: Map<string, Item> = new Map();
+          
+          if (fnItem.tag === Tag.CLOSURE) {
+            // Handle regular closure
+            const closureData = fnItem.value as ClosureValue;
+            funcAddr = closureData.funcAddr;
+            paramNames = closureData.paramNames;
+          } else {
+            // Handle captured closure
+            const capturedClosureData = fnItem.value as CapturedClosureValue;
+            funcAddr = capturedClosureData.funcAddr;
+            paramNames = capturedClosureData.paramNames;
+            capturedVars = capturedClosureData.capturedVars;
           }
           
-          // Now closureData is the value from heap
-          const closureValue = closureData as CapturedClosureValue;
-          
-          const numParams = closureValue.paramNames.length;
+          const numParams = paramNames.length;
           if (this.OS.length < numParams + 1) {
             throw new Error(`Not enough arguments for function call: expected ${numParams}, got ${this.OS.length - 1}`);
           }
@@ -271,13 +280,13 @@ export class RustLikeVirtualMachine {
           const allBindings = new Map<string, Item>();
           
           // Add captured variables
-          for (const [name, value] of closureValue.capturedVars.entries()) {
+          for (const [name, value] of capturedVars.entries()) {
             allBindings.set(name, value);
           }
           
           // Add parameters
           for (let i = 0; i < numParams; i++) {
-            allBindings.set(closureValue.paramNames[i], args[i]);
+            allBindings.set(paramNames[i], args[i]);
           }
           
           // Create and set new environment
@@ -287,7 +296,7 @@ export class RustLikeVirtualMachine {
           });
           
           // Jump to function body
-          this.PC = closureValue.funcAddr - 1; // -1 because PC gets incremented after each step
+          this.PC = funcAddr - 1; // -1 because PC gets incremented after each step
           
         } catch (error) {
           console.error("Error in CALL instruction:", error);
