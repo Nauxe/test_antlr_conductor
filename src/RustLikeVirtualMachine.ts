@@ -248,46 +248,29 @@ export class RustLikeVirtualMachine {
           allBindings.set(name, item);
         }
 
-        // Insert args (or shadow captures if same name) into newBindings
+        // Insert args into newBindings
         for (let i = 0; i < paramNames.length; i++) {
-          const name = paramNames[i];
-          allBindings.set(name, args[i]);
+          allBindings.set(paramNames[i], args[i]);
         }
 
-        // TODO: add bindings declared in the function here after scanning them 
-
-        // Split bindings into bindings of stack allocated and heap allocated objects
-        const heapBindings = new Map<string, Item>();
-        const stackBindings = new Map<string, Item>(); // Only closures should be here
-
-        for (const [name, item] of allBindings) {
-          if (item.tag === Tag.CLOSURE) {
-            stackBindings.set(name, item);
-          } else {
-            heapBindings.set(name, item);
-          }
-        }
-
-        // Create a new environment that extends the function's environment
-        // TODO/Extension: possibly allocate based on amount of space needed for the closure, 
-        // this can be scanned during compilation
-        const newEnv: Item = this.heap.allocEnv(128);
-        const envData = {
-          parentAddr: newEnv,
-          bindings: heapBindings,
-        };
-        this.heap.set_data(newEnv, envData);
-
-        // Save current environment and PC onto RTS
+        // Create new frame
         const newFrame: Frame = {
-          __return_pc: this.PC,
+          __return_pc: this.PC + 1,
           __old_env: this.E,
-          bindings: stackBindings,
-        }
+          bindings: allBindings
+        };
+
+        // Push frame onto RTS
         this.RTS.push(newFrame);
 
-        this.E = newEnv.value;
-        this.PC = funcAddr - 1; // -1 because PC is incremented after step()
+        // Set new environment
+        this.E = JS_value_to_Item(this.heap, {
+          parentAddr: this.E.value,
+          bindings: allBindings
+        });
+
+        // Jump to function
+        this.PC = funcAddr - 1; // -1 since PC is incremented every step
         break;
       }
       case Bytecode.ENTER_SCOPE: {
@@ -407,20 +390,21 @@ export class RustLikeVirtualMachine {
         break;
       }
       case Bytecode.RET: {
-        const returnValue = this.OS.pop(); // Pop return value (if any)
-        const currentFrame = this.RTS.pop(); // Pop RTS frame
-        if (!currentFrame) throw new Error("Runtime stack underflow on RET");
+        // Pop the return value
+        const retVal = this.OS.pop()!;
 
-        // Restore PC and E 
-        this.PC = currentFrame.__return_pc;
-        this.E = currentFrame.__old_env;
+        // Pop the frame
+        const frame = this.RTS.pop()!;
 
-        if (returnValue !== undefined) {
-          this.OS.push(returnValue); // Push return value back on OS
-        } else {
-          this.OS.push(new Item(Tag.UNIT, 0, undefined));
-        }
-        return;
+        // Restore environment
+        this.E = frame.__old_env;
+
+        // Jump back to caller
+        this.PC = frame.__return_pc - 1; // -1 since PC is incremented every step
+
+        // Push return value
+        this.OS.push(retVal);
+        break;
       }
       case Bytecode.DECL: {
         const { name, rustLikeType } = inst.operand!;

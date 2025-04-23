@@ -419,50 +419,48 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   }
 
   visitFn_decl(ctx: Fn_declContext): RustLikeType {
-    const name = ctx.IDENTIFIER().getText();
-    const block = ctx.block_expr() === null ? ctx.block_stmt() : ctx.block_expr();
-    let fnType: FnType;
-
-    // Get argument types
-    const paramNames = [];
-    const paramTypes = [];
-    const paramList = ctx.param_list_opt().param_list();
-    if (paramList !== null) {
-      paramList.param().forEach(
-        (param) => {
-          paramNames.push(param.IDENTIFIER().getText());
-          paramTypes.push(parseType(param.type()));
-        });
+    const fnName = ctx.IDENTIFIER().getText();
+    const fnRetType = parseType(ctx.type());
+    let paramNames = [];
+    let paramTypes = [];
+    if (ctx.param_list_opt().param_list() !== null) {
+      ctx.param_list_opt().param_list().param().forEach((param) => {
+        paramNames.push(param.IDENTIFIER().getText());
+        paramTypes.push(parseType(param.type()));
+      });
     }
 
-    // Get capture types 
-    const scanRes: ScanResult = new ScopedScannerVisitor(block).visit(block);
+    // Create a new scope for the function body
+    const oldEnv = this.typeEnv;
+    this.typeEnv = this.typeEnv.extend({
+      names: paramNames,
+      types: paramTypes
+    });
 
-    // Enter scope
-    this.typeEnv = this.typeEnv.extend(scanRes);
+    // Type check the function body
+    let bodyType: RustLikeType;
+    if (ctx.block_expr()) {
+      bodyType = this.visit(ctx.block_expr());
+    } else {
+      bodyType = this.visit(ctx.block_stmt());
+    }
 
-    // Check return types
-    const retType = parseType(ctx.type());
-    const bodyType: RustLikeType = this.visit(block);
-    if (!typeEqual(retType, bodyType))
-      throw new Error(`Expected return type ${retType} in function declaration for ${name}, got ${bodyType}.`);
+    // Restore the old environment
+    this.typeEnv = oldEnv;
 
-    // Exit scope
-    this.typeEnv = this.typeEnv.parent;
+    // Check that the body type matches the return type
+    if (!typeEqual(bodyType, fnRetType)) {
+      throw new Error(`Function ${fnName} body type ${bodyType.tag} does not match return type ${fnRetType.tag}`);
+    }
 
-    // Initalize fnType with values
-    fnType = {
+    return {
       tag: Tag.CLOSURE,
-      captureNames: scanRes.names,
-      captureTypes: scanRes.types,
+      captureNames: [], // To be initialized in other visitors 
+      captureTypes: [], // To be initalized in other visitors
       paramNames: paramNames,
       paramTypes: paramTypes,
-      retType: bodyType,
+      retType: fnRetType,
     };
-
-    // Add declaration
-    this.typeEnv.types.set(name, fnType);
-    return UNIT_TYPE;
   }
 
   visitPrint_stmt(ctx: Print_stmtContext): RustLikeType {
