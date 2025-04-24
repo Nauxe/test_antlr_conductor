@@ -61,15 +61,84 @@ export class RustLikeCompilerVisitor
   /* ─────────── Top-level ─────────── */
 
   visitProg(ctx: ProgContext): Item {
+    console.log("Visiting program:", ctx.getText());
+    console.log("Program has children:", ctx.getChildCount());
+    for (let i = 0; i < ctx.getChildCount(); i++) {
+      console.log(`Child ${i} type:`, ctx.getChild(i).constructor.name);
+    }
+    
     // First scan declarations to build the type environment
     new ScopedScannerVisitor(ctx).visit(ctx);
-    // Visit program body: prefer statement list, then block expression, then block statement
-    if (typeof (ctx as any).stmt_list === 'function') {
-      this.visit((ctx as any).stmt_list() as Stmt_listContext);
-    } else if (ctx.block_expr()) {
-      this.visit(ctx.block_expr()!);
-    } else if (ctx.block_stmt()) {
-      this.visit(ctx.block_stmt()!);
+    
+    // Directly check if there's a block and handle it
+    if (ctx.getText().startsWith("{")) {
+      console.log("Program contains a block statement");
+      
+      // For blocks, we need to manually extract statements
+      let hasBinaryOpExpr = false;
+      if (ctx.getChildCount() > 1 && ctx.getChild(1).getChildCount() > 0) {
+        // Navigate through the AST to find expressions
+        const block = ctx.getChild(1);
+        console.log("Block child count:", block.getChildCount());
+        
+        // Process each element in the block
+        for (let i = 0; i < block.getChildCount(); i++) {
+          const child = block.getChild(i);
+          console.log(`Block child ${i} type:`, child.constructor.name);
+          
+          // If this is a statement list, process it
+          if (child.constructor.name.includes("Stmt_list")) {
+            this.visit(child);
+            hasBinaryOpExpr = true;
+          }
+          
+          // Try to process any potential expression
+          try {
+            if (child.getChildCount() > 0) {
+              // Check all children for expressions
+              for (let j = 0; j < child.getChildCount(); j++) {
+                const innerChild = child.getChild(j);
+                console.log(`  - Inner child ${j} type:`, innerChild.constructor.name);
+                
+                if (innerChild.constructor.name.includes("Expr")) {
+                  console.log("  - Found expression:", innerChild.getText());
+                  this.visit(innerChild);
+                  hasBinaryOpExpr = true;
+                }
+              }
+            }
+          } catch (e) {
+            console.log("Error examining child:", e);
+          }
+        }
+      }
+      
+      // If we didn't find an expression, try the standard approach
+      if (!hasBinaryOpExpr) {
+        // Visit program body using standard approach
+        if (typeof (ctx as any).stmt_list === 'function') {
+          console.log("Visiting stmt_list");
+          this.visit((ctx as any).stmt_list() as Stmt_listContext);
+        } else if (ctx.block_expr()) {
+          console.log("Visiting block_expr");
+          this.visit(ctx.block_expr()!);
+        } else if (ctx.block_stmt()) {
+          console.log("Visiting block_stmt");
+          this.visit(ctx.block_stmt()!);
+        }
+      }
+    } else {
+      // Visit program body using standard approach
+      if (typeof (ctx as any).stmt_list === 'function') {
+        console.log("Visiting stmt_list");
+        this.visit((ctx as any).stmt_list() as Stmt_listContext);
+      } else if (ctx.block_expr()) {
+        console.log("Visiting block_expr");
+        this.visit(ctx.block_expr()!);
+      } else if (ctx.block_stmt()) {
+        console.log("Visiting block_stmt");
+        this.visit(ctx.block_stmt()!);
+      }
     }
 
     // Add DONE instruction
@@ -348,9 +417,51 @@ export class RustLikeCompilerVisitor
   /* expression used *as* a statement */
   visitExpr_stmt(ctx: Expr_stmtContext): Item {
     console.log("Visiting expression statement:", ctx.expr().getText());
+    console.log("Expression statement child count:", ctx.getChildCount());
     
-    // Visit the expression to generate its instructions
-    const result = this.visit(ctx.expr());
+    // Check if the expression is a binary operation
+    if (ctx.expr() && ctx.expr().getChildCount() === 3) {
+      try {
+        const firstChild = ctx.expr().getChild(0);
+        const opChild = ctx.expr().getChild(1);
+        const secondChild = ctx.expr().getChild(2);
+        
+        console.log("Possible binary operation:", 
+          firstChild.getText(), opChild.getText(), secondChild.getText());
+          
+        // Check if this is a binary operation with numbers
+        if (!isNaN(Number(firstChild.getText())) && 
+            !isNaN(Number(secondChild.getText())) && 
+            opChild.getText() === "+") {
+              
+          console.log("Direct handling of numeric addition");
+          // Add instruction to load the first number
+          this.instructions.push(
+            new Inst(Bytecode.LDCI, parseInt(firstChild.getText(), 10))
+          );
+          
+          // Add instruction to load the second number
+          this.instructions.push(
+            new Inst(Bytecode.LDCI, parseInt(secondChild.getText(), 10))
+          );
+          
+          // Add instruction for the addition
+          this.instructions.push(new Inst(Bytecode.PLUS));
+          
+          console.log("Added direct binary operation, count:", this.instructions.length);
+        } else {
+          // Normal handling of the expression
+          const result = this.visit(ctx.expr());
+        }
+      } catch (e) {
+        console.log("Error handling binary operation:", e);
+        // Fall back to normal handling
+        const result = this.visit(ctx.expr());
+      }
+    } else {
+      // Normal handling of the expression
+      const result = this.visit(ctx.expr());
+    }
     
     // Important: Add a POP instruction after the expression evaluation
     // since the expression result is left on the stack but not used in a statement context
@@ -358,7 +469,7 @@ export class RustLikeCompilerVisitor
     
     console.log("Instructions after visiting expression:", this.instructions.length);
     
-    return result;
+    return this.defaultResult();
   }
 
   /* ─────────── Expressions ─────────── */
@@ -438,7 +549,7 @@ export class RustLikeCompilerVisitor
       this.instructions.push(new Inst(Bytecode.LDCI, -1));
       this.instructions.push(new Inst(Bytecode.TIMES));
       this.instructions.push(new Inst(Bytecode.PLUS));
-      console.log("Added subtraction instructions");
+      console.log("Added subtraction instructions, count:", this.instructions.length);
 
     } else if (op === "/" || op === "%") {
       console.log("Generating division/modulo code");
@@ -541,10 +652,10 @@ export class RustLikeCompilerVisitor
       this.visit(lhs);
       this.visit(rhs);
       this.instructions.push(new Inst(OP_TO_BYTE[op]));
-      console.log(`Added ${op} instruction:`, OP_TO_BYTE[op]);
+      console.log(`Added ${op} instruction:`, OP_TO_BYTE[op], "count:", this.instructions.length);
     }
 
-    console.log("Binary op expression result:", this.instructions.length);
+    console.log("Binary op expression result, instruction count:", this.instructions.length);
     return this.defaultResult();
   }
 
