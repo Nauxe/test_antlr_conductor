@@ -123,15 +123,36 @@ export class Heap {
     const tag = this.get_tag(addr);
     const size = this.get_size(addr);
     const item = new Item(tag, size, addr); // For heap-allocated, value is addr
-    //if (tag === Tag.ENVIRONMENT) {
-    //  const env = this.get_data(item) as { parentAddr: number | null, bindings: Map<string, number> };
-    //  const jsEnv: Record<string, any> = {};
-    //  for (const [key, addr] of env.bindings.entries()) {
-    //    jsEnv[key] = this.addr_to_JS_value(addr);
-    //  }
-    //  jsEnv.__parent = env.parentAddr !== null ? this.addr_to_JS_value(env.parentAddr) : null;
-    //  return jsEnv;
-    //}
+    
+    // Special handling for environments to avoid circular references
+    if (tag === Tag.ENVIRONMENT) {
+      const env = this.get_data(item) as EnvironmentValue;
+      const jsEnv: Record<string, any> = {};
+      
+      // Convert Map to a plain object for JSON serialization
+      for (const [key, bindingItem] of env.bindings.entries()) {
+        // For primitive values, just use the value directly
+        if (is_primitive(bindingItem.tag)) {
+          jsEnv[key] = bindingItem.value;
+        } else if (bindingItem.tag === Tag.STRING) {
+          // For strings, get the actual string value
+          jsEnv[key] = this.get_data(bindingItem);
+        } else {
+          // For other heap objects, just use a reference description to avoid circularity
+          jsEnv[key] = `<${Tag[bindingItem.tag]}>`;
+        }
+      }
+      
+      // Include parent reference but avoid circular references
+      if (env.parentAddr !== null) {
+        jsEnv.__parent = `<Parent Environment>`;
+      } else {
+        jsEnv.__parent = null;
+      }
+      
+      return jsEnv;
+    }
+    
     return this.get_data(item);
   }
 
@@ -347,9 +368,60 @@ export class Item {
   to_JS_value(heap: Heap): any {
     if (is_primitive(this.tag)) {
       return this.value;
+    } else if (this.tag === Tag.CLOSURE) {
+      return {
+        type: "Closure",
+        funcAddr: this.value.funcAddr,
+        paramNames: this.value.paramNames,
+        captureNames: this.value.captureNames
+      };
+    } else if (this.tag === Tag.CAPTURED_CLOSURE) {
+      // Create a safe representation of captured vars without circular references
+      const capturedVarsObj: Record<string, any> = {};
+      for (const [name, item] of this.value.capturedVars.entries()) {
+        if (is_primitive(item.tag)) {
+          capturedVarsObj[name] = item.value;
+        } else {
+          capturedVarsObj[name] = `<${Tag[item.tag]}>`;
+        }
+      }
+      
+      return {
+        type: "CapturedClosure",
+        funcAddr: this.value.funcAddr,
+        paramNames: this.value.paramNames,
+        capturedVars: capturedVarsObj
+      };
+    } else if (this.tag === Tag.ARRAY || this.tag === Tag.TUPLE) {
+      // For arrays and tuples, map the elements to safe representations
+      return this.value.map((item: Item) => {
+        if (is_primitive(item.tag)) {
+          return item.value;
+        } else if (item.tag === Tag.STRING) {
+          return heap.get_data(item);
+        } else {
+          return `<${Tag[item.tag]}>`;
+        }
+      });
+    } else if (this.tag === Tag.RANGE) {
+      return {
+        type: "Range",
+        start: this.value.start,
+        end: this.value.end
+      };
     } else {
+      // For other heap objects, use addr_to_JS_value
       return heap.addr_to_JS_value(this.value);
     }
+  }
+  
+  // Add toJSON method to handle JSON.stringify directly on Item
+  toJSON(): any {
+    return {
+      tag: Tag[this.tag],
+      size: this.size,
+      value: is_primitive(this.tag) ? this.value : `<${Tag[this.tag]}>`
+    };
   }
 }
 
