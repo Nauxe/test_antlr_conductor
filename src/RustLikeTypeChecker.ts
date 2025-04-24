@@ -216,9 +216,9 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
     const scanResult = scanner.visit(ctx);
     this.typeEnv = new TypeEnvironment(scanResult);
 
-    // Visit the statement list - stmt_list should be the first child of prog
-    if (ctx.getChildCount() > 0) {
-      return this.visit(ctx.getChild(0));
+    // Visit the statement list
+    if (ctx.stmt_list()) {
+      return this.visit(ctx.stmt_list());
     }
     
     return UNIT_TYPE;

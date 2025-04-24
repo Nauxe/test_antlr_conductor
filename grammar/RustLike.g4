@@ -59,14 +59,8 @@ block_stmt
     ;
 
 block_expr
-    : '{' stmt_list expr? '}'  // Allow for an optional final expression without semicolon
-    | '{' stmt_list_no_trailing expr_stmt '}'  // Special case for expression statement as the last statement
-    ;
-
-// A statement list that doesn't include the last statement (used for block_expr when the last statement is an expr_stmt)
-stmt_list_no_trailing
-    : stmt*
-    ;
+  : '{' stmt_list expr? '}'  // Allow for an optional final expression
+  ;
 
 // ─── Expressions ─────────────────────────────────────────────────────────────
 // A single left‑recursive expr rule, handling:
