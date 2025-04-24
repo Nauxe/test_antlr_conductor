@@ -579,26 +579,24 @@ export class RustLikeVirtualMachine {
 
     if (this.OS.length > 0) {
       const resultItem = this.OS[this.OS.length - 1];
+      
       if (is_primitive(resultItem.tag)) {
-        // For primitive values, return them directly without JSON stringifying
-        result.value = resultItem.value.toString();
+        // For primitive values like numbers and booleans
+        result.value = String(resultItem.value);
         
-        // For simple arithmetic, include the computation in the result
-        if (this.instrs.length <= 10 && this.instrs.some(i => 
-            i.opcode === Bytecode.PLUS || 
-            i.opcode === Bytecode.TIMES || 
-            i.opcode === Bytecode.LT)) {
-          
+        // For basic operations, provide a more descriptive result
+        if (this.instrs.some(i => i.opcode === Bytecode.PLUS || 
+                              i.opcode === Bytecode.TIMES)) {
+          // Find the numeric operands in the instructions
           const ldciInstrs = this.instrs.filter(i => i.opcode === Bytecode.LDCI);
           if (ldciInstrs.length >= 2) {
             const num1 = ldciInstrs[0].operand;
             const num2 = ldciInstrs[1].operand;
             
-            // Find the operation
+            // Determine which operation was performed
             let op = '';
             if (this.instrs.some(i => i.opcode === Bytecode.PLUS)) op = '+';
             else if (this.instrs.some(i => i.opcode === Bytecode.TIMES)) op = '*';
-            else if (this.instrs.some(i => i.opcode === Bytecode.LT)) op = '<';
             
             if (op) {
               result.value = `${num1} ${op} ${num2} = ${resultItem.value}`;
@@ -606,10 +604,12 @@ export class RustLikeVirtualMachine {
           }
         }
       } else {
-        // For heap-allocated values, convert to JS value
+        // For heap-allocated values
         try {
-          result.value = JSON.stringify(this.heap.addr_to_JS_value(resultItem.value));
+          const jsValue = this.heap.addr_to_JS_value(resultItem.value);
+          result.value = jsValue !== undefined ? JSON.stringify(jsValue) : "()";
         } catch (e) {
+          // If we can't convert to JS value, at least show the tag
           result.value = `<${Tag[resultItem.tag]}>`;
         }
       }

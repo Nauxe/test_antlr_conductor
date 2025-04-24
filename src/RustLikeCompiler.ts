@@ -32,6 +32,11 @@ import { Heap, Item, Tag } from "./Heap";
 import { Bytecode, Inst } from "./RustLikeVirtualMachine";
 import { ScopedScannerVisitor } from "./RustLikeTypeChecker";
 
+// Add this near the top of the file, after other imports
+class Frame {
+  declarations: Map<string, number> = new Map();
+}
+
 /*  map supported infix operators to byte-code instruction  */
 // only include those the VM natively supports
 const OP_TO_BYTE: Record<string, Bytecode> = {
@@ -47,6 +52,7 @@ export class RustLikeCompilerVisitor
   private heap = new Heap(2048);
   /** final byte-code output for the VM */
   public instructions: Inst[] = [];
+  frames: Frame[] = [new Frame()]; // Add global frame
 
   // counter for generating fresh temporary variable names
   private tmpCounter = 0;
@@ -67,201 +73,29 @@ export class RustLikeCompilerVisitor
       console.log(`Child ${i} type:`, ctx.getChild(i).constructor.name);
     }
     
-    // Special case for "{ 2 + 3; }" and similar expressions
-    const text = ctx.getText();
-    
-    // Check for specific patterns that we know are problematic
-    if (text.match(/\{\s*\d+\s*\+\s*\d+\s*;\s*\}/)) {
-      console.log("SPECIAL CASE: Direct handling of simple addition expression");
-      const matches = text.match(/\{\s*(\d+)\s*\+\s*(\d+)\s*;\s*\}/);
-      if (matches && matches.length >= 3) {
-        const num1 = parseInt(matches[1], 10);
-        const num2 = parseInt(matches[2], 10);
-        console.log(`Directly generating instructions for ${num1} + ${num2}`);
-        
-        // Generate instructions directly
-        this.instructions.push(new Inst(Bytecode.LDCI, num1));
-        this.instructions.push(new Inst(Bytecode.LDCI, num2));
-        this.instructions.push(new Inst(Bytecode.PLUS));
-        this.instructions.push(new Inst(Bytecode.POP)); // For statement context
-        this.instructions.push(new Inst(Bytecode.DONE));
-        return this.defaultResult();
-      }
-    }
-    
-    if (text.match(/\{\s*\d+\s*\-\s*\d+\s*;\s*\}/)) {
-      console.log("SPECIAL CASE: Direct handling of simple subtraction expression");
-      const matches = text.match(/\{\s*(\d+)\s*\-\s*(\d+)\s*;\s*\}/);
-      if (matches && matches.length >= 3) {
-        const num1 = parseInt(matches[1], 10);
-        const num2 = parseInt(matches[2], 10);
-        console.log(`Directly generating instructions for ${num1} - ${num2}`);
-        
-        // Generate instructions directly
-        this.instructions.push(new Inst(Bytecode.LDCI, num1));
-        this.instructions.push(new Inst(Bytecode.LDCI, num2));
-        this.instructions.push(new Inst(Bytecode.LDCI, -1));
-        this.instructions.push(new Inst(Bytecode.TIMES));
-        this.instructions.push(new Inst(Bytecode.PLUS));
-        this.instructions.push(new Inst(Bytecode.POP)); // For statement context
-        this.instructions.push(new Inst(Bytecode.DONE));
-        return this.defaultResult();
-      }
-    }
-    
-    if (text.match(/\{\s*\d+\s*\*\s*\d+\s*;\s*\}/)) {
-      console.log("SPECIAL CASE: Direct handling of simple multiplication expression");
-      const matches = text.match(/\{\s*(\d+)\s*\*\s*(\d+)\s*;\s*\}/);
-      if (matches && matches.length >= 3) {
-        const num1 = parseInt(matches[1], 10);
-        const num2 = parseInt(matches[2], 10);
-        console.log(`Directly generating instructions for ${num1} * ${num2}`);
-        
-        // Generate instructions directly
-        this.instructions.push(new Inst(Bytecode.LDCI, num1));
-        this.instructions.push(new Inst(Bytecode.LDCI, num2));
-        this.instructions.push(new Inst(Bytecode.TIMES));
-        this.instructions.push(new Inst(Bytecode.POP)); // For statement context
-        this.instructions.push(new Inst(Bytecode.DONE));
-        return this.defaultResult();
-      }
-    }
-    
-    if (text.match(/\{\s*let\s+(\w+)\s*:\s*u32\s*=\s*(\d+)\s*;\s*\w+\s*\+\s*(\d+)\s*;\s*\}/)) {
-      console.log("SPECIAL CASE: Direct handling of variable declaration and use");
-      const matches = text.match(/\{\s*let\s+(\w+)\s*:\s*u32\s*=\s*(\d+)\s*;\s*(\w+)\s*\+\s*(\d+)\s*;\s*\}/);
-      if (matches && matches.length >= 5) {
-        const varName = matches[1];
-        const initValue = parseInt(matches[2], 10);
-        const usedVar = matches[3];
-        const addValue = parseInt(matches[4], 10);
-        
-        console.log(`Directly generating instructions for let ${varName}: u32 = ${initValue}; ${usedVar} + ${addValue};`);
-        
-        // Generate instructions directly
-        // Declare the variable
-        this.instructions.push(
-          new Inst(Bytecode.DECL, {
-            name: varName,
-            rustLikeType: new Item(Tag.UNIT, 0, 0), // placeholder type info
-          })
-        );
-        
-        // Initialize the variable
-        this.instructions.push(new Inst(Bytecode.LDCI, initValue));
-        this.instructions.push(new Inst(Bytecode.ASSIGN, varName));
-        
-        // Create the expression
-        this.instructions.push(new Inst(Bytecode.LDHS, usedVar));
-        this.instructions.push(new Inst(Bytecode.LDCI, addValue));
-        this.instructions.push(new Inst(Bytecode.PLUS));
-        this.instructions.push(new Inst(Bytecode.POP)); // For statement context
-        
-        this.instructions.push(new Inst(Bytecode.DONE));
-        return this.defaultResult();
-      }
-    }
-    
-    // Special case for function declaration and call: `fn add(x: u32, y: u32) -> u32 { x + y } add(2, 3);`
-    if (text.match(/\{\s*fn\s+(\w+)\s*\(\s*(\w+)\s*:\s*u32\s*,\s*(\w+)\s*:\s*u32\s*\)\s*->\s*u32\s*\{\s*\w+\s*\+\s*\w+\s*\}\s*\w+\s*\(\s*\d+\s*,\s*\d+\s*\)\s*;\s*\}/)) {
-      console.log("SPECIAL CASE: Direct handling of function declaration and call");
-      
-      const fnNameMatch = text.match(/fn\s+(\w+)/);
-      const paramMatch = text.match(/\(\s*(\w+)\s*:\s*u32\s*,\s*(\w+)\s*:\s*u32\s*\)/);
-      const bodyMatch = text.match(/\{\s*(\w+)\s*\+\s*(\w+)\s*\}/);
-      const callMatch = text.match(/(\w+)\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)/);
-      
-      if (fnNameMatch && paramMatch && bodyMatch && callMatch) {
-        const fnName = fnNameMatch[1];
-        const param1 = paramMatch[1];
-        const param2 = paramMatch[2];
-        const arg1 = parseInt(callMatch[2], 10);
-        const arg2 = parseInt(callMatch[3], 10);
-        
-        console.log(`Directly generating instructions for function ${fnName}(${param1}, ${param2}) and call ${fnName}(${arg1}, ${arg2})`);
-        
-        // Generate the result of calling the function directly 
-        // (without actually creating the function since we know what it does)
-        this.instructions.push(new Inst(Bytecode.LDCI, arg1));
-        this.instructions.push(new Inst(Bytecode.LDCI, arg2));
-        this.instructions.push(new Inst(Bytecode.PLUS));
-        
-        this.instructions.push(new Inst(Bytecode.DONE));
-        return this.defaultResult();
-      }
-    }
-    
     // First scan declarations to build the type environment
     new ScopedScannerVisitor(ctx).visit(ctx);
     
-    // Directly check if there's a block and handle it
-    if (ctx.getText().startsWith("{")) {
-      console.log("Program contains a block statement");
+    // Visit all children of the program
+    for (let i = 0; i < ctx.getChildCount(); i++) {
+      const child = ctx.getChild(i);
+      console.log(`Processing child ${i}:`, child.constructor.name);
       
-      // For blocks, we need to manually extract statements
-      let hasBinaryOpExpr = false;
-      if (ctx.getChildCount() > 1 && ctx.getChild(1).getChildCount() > 0) {
-        // Navigate through the AST to find expressions
-        const block = ctx.getChild(1);
-        console.log("Block child count:", block.getChildCount());
-        
-        // Process each element in the block
-        for (let i = 0; i < block.getChildCount(); i++) {
-          const child = block.getChild(i);
-          console.log(`Block child ${i} type:`, child.constructor.name);
-          
-          // If this is a statement list, process it
-          if (child.constructor.name.includes("Stmt_list")) {
-            this.visit(child);
-            hasBinaryOpExpr = true;
-          }
-          
-          // Try to process any potential expression
-          try {
-            if (child.getChildCount() > 0) {
-              // Check all children for expressions
-              for (let j = 0; j < child.getChildCount(); j++) {
-                const innerChild = child.getChild(j);
-                console.log(`  - Inner child ${j} type:`, innerChild.constructor.name);
-                
-                if (innerChild.constructor.name.includes("Expr")) {
-                  console.log("  - Found expression:", innerChild.getText());
-                  this.visit(innerChild);
-                  hasBinaryOpExpr = true;
-                }
-              }
-            }
-          } catch (e) {
-            console.log("Error examining child:", e);
-          }
+      // Handle known node types
+      if (child.constructor.name.includes("Block_stmt")) {
+        console.log("Processing block statement");
+        this.visit(child);
+      } else if (child.constructor.name.includes("Block_expr")) {
+        console.log("Processing block expression");
+        this.visit(child);
+      } else {
+        // For other types, use the default visit mechanism
+        try {
+          console.log("Trying to visit child directly");
+          this.visit(child);
+        } catch (e) {
+          console.error("Error visiting child:", e);
         }
-      }
-      
-      // If we didn't find an expression, try the standard approach
-      if (!hasBinaryOpExpr) {
-        // Visit program body using standard approach
-        if (typeof (ctx as any).stmt_list === 'function') {
-          console.log("Visiting stmt_list");
-          this.visit((ctx as any).stmt_list() as Stmt_listContext);
-        } else if (ctx.block_expr()) {
-          console.log("Visiting block_expr");
-          this.visit(ctx.block_expr()!);
-        } else if (ctx.block_stmt()) {
-          console.log("Visiting block_stmt");
-          this.visit(ctx.block_stmt()!);
-        }
-      }
-    } else {
-      // Visit program body using standard approach
-      if (typeof (ctx as any).stmt_list === 'function') {
-        console.log("Visiting stmt_list");
-        this.visit((ctx as any).stmt_list() as Stmt_listContext);
-      } else if (ctx.block_expr()) {
-        console.log("Visiting block_expr");
-        this.visit(ctx.block_expr()!);
-      } else if (ctx.block_stmt()) {
-        console.log("Visiting block_stmt");
-        this.visit(ctx.block_stmt()!);
       }
     }
 
@@ -540,60 +374,21 @@ export class RustLikeCompilerVisitor
 
   /* expression used *as* a statement */
   visitExpr_stmt(ctx: Expr_stmtContext): Item {
-    console.log("Visiting expression statement:", ctx.expr().getText());
-    console.log("Expression statement child count:", ctx.getChildCount());
-    
-    // Check if the expression is a binary operation
-    if (ctx.expr() && ctx.expr().getChildCount() === 3) {
-      try {
-        const firstChild = ctx.expr().getChild(0);
-        const opChild = ctx.expr().getChild(1);
-        const secondChild = ctx.expr().getChild(2);
-        
-        console.log("Possible binary operation:", 
-          firstChild.getText(), opChild.getText(), secondChild.getText());
-          
-        // Check if this is a binary operation with numbers
-        if (!isNaN(Number(firstChild.getText())) && 
-            !isNaN(Number(secondChild.getText())) && 
-            opChild.getText() === "+") {
-              
-          console.log("Direct handling of numeric addition");
-          // Add instruction to load the first number
-          this.instructions.push(
-            new Inst(Bytecode.LDCI, parseInt(firstChild.getText(), 10))
-          );
-          
-          // Add instruction to load the second number
-          this.instructions.push(
-            new Inst(Bytecode.LDCI, parseInt(secondChild.getText(), 10))
-          );
-          
-          // Add instruction for the addition
-          this.instructions.push(new Inst(Bytecode.PLUS));
-          
-          console.log("Added direct binary operation, count:", this.instructions.length);
-        } else {
-          // Normal handling of the expression
-          const result = this.visit(ctx.expr());
-        }
-      } catch (e) {
-        console.log("Error handling binary operation:", e);
-        // Fall back to normal handling
-        const result = this.visit(ctx.expr());
-      }
-    } else {
-      // Normal handling of the expression
+    try {
+      console.log("Visiting expression statement:", ctx.getText());
+      // Visit the expression, which will generate the bytecode for it
       const result = this.visit(ctx.expr());
+      
+      // Add POP instruction to discard the expression result in statement context
+      // This is necessary because expressions in statement context don't return values
+      this.instructions.push(new Inst(Bytecode.POP));
+      console.log("Added POP instruction for expression statement");
+      
+      return result;
+    } catch (error) {
+      console.error("Error in expression statement:", error);
+      throw error;
     }
-    
-    // Important: Add a POP instruction after the expression evaluation
-    // since the expression result is left on the stack but not used in a statement context
-    this.instructions.push(new Inst(Bytecode.POP));
-    
-    console.log("Instructions after visiting expression:", this.instructions.length);
-    
-    return this.defaultResult();
   }
 
   /* ─────────── Expressions ─────────── */
@@ -842,56 +637,47 @@ export class RustLikeCompilerVisitor
   }
 
   visitBlock_expr(ctx: Block_exprContext): Item {
-    try {
-      console.log("Visiting block expression");
+    console.log("Visiting block expression:", ctx.getText());
+    
+    // Create new frame for the block scope
+    const blockScope = new Frame();
+    this.frames.push(blockScope);
+    
+    const statements = ctx.stmt_list()?.stmt() || [];
+    const numStatements = statements.length;
+    console.log(`Block has ${numStatements} statements`);
+    
+    // Process all statements in the block
+    for (let i = 0; i < numStatements; i++) {
+      const stmt = statements[i];
+      const isLast = i === numStatements - 1;
       
-      // Enter block scope
-      this.instructions.push(new Inst(Bytecode.ENTER_SCOPE, 0));
-      console.log("Added ENTER_SCOPE instruction");
-
-      // Visit all statements
-      if (ctx.stmt_list() && ctx.stmt_list().stmt()) {
-        const stmts = ctx.stmt_list().stmt();
-        console.log("Number of statements in block_expr:", stmts.length);
+      // Special handling for the last statement if it's an expression statement
+      if (isLast && stmt instanceof Expr_stmtContext) {
+        console.log("Last statement is an expression statement");
+        // For the last expr statement, we want to keep its value
+        const expr = stmt.expr();
+        this.visit(expr);
         
-        for (let i = 0; i < stmts.length; i++) {
-          if (stmts[i]) {
-            console.log(`Processing statement ${i} in block_expr:`, 
-              stmts[i].fn_decl() ? "fn_decl" : 
-              stmts[i].decl() ? "decl" : 
-              stmts[i].expr_stmt() ? `expr_stmt(${stmts[i].expr_stmt()?.expr().getText()})` : 
-              "other_stmt"
-            );
-            this.visit(stmts[i]);
-            console.log(`Instructions after statement ${i} in block_expr:`, this.instructions.length);
-          }
-        }
+        // Don't add POP here - we want to keep the result on the stack
+        console.log("Keeping value of last expression");
       } else {
-        console.log("No statements in block_expr");
+        // Normal processing for all other statements
+        this.visit(stmt);
       }
-
-      // Visit the final expression if it exists
-      let result: Item;
-      if (ctx.expr()) {
-        console.log("Processing final expression in block_expr:", ctx.expr().getText());
-        result = this.visit(ctx.expr());
-        console.log("Instructions after final expression:", this.instructions.length);
-      } else {
-        console.log("No final expression in block_expr, adding UNIT value");
-        // No expression in the block, return unit value
-        this.instructions.push(new Inst(Bytecode.LDCI, 0)); // UNIT value
-        result = this.defaultResult();
-      }
-
-      // Exit block scope
-      this.instructions.push(new Inst(Bytecode.EXIT_SCOPE));
-      console.log("Added EXIT_SCOPE instruction");
-      
-      return result;
-    } catch (error) {
-      console.error("Error in block expression:", error);
-      throw error;
     }
+    
+    // If the block has no statements or no expression statement at the end,
+    // push a UNIT value to represent empty block result
+    if (numStatements === 0 || !(statements[numStatements - 1] instanceof Expr_stmtContext)) {
+      console.log("Adding UNIT value (0) for block with no tail expression");
+      this.instructions.push(new Inst(Bytecode.LDCI, 0)); // Use 0 as UNIT value
+    }
+    
+    // Remove the frame after processing
+    this.frames.pop();
+    
+    return this.defaultResult();
   }
 
   visitIf_expr(ctx: If_exprContext): Item {
