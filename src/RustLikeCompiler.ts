@@ -377,7 +377,11 @@ export class RustLikeCompilerVisitor
     try {
       console.log("Visiting expression statement:", ctx.getText());
       
-      // Get the parent context
+      // Check if this is a direct child of a block_expr - that means it's explicitly part of a block expression rule
+      const isDirectPartOfBlockExpr = ctx.parent?.parent?.constructor.name.includes("Block_exprContext") &&
+                                     !ctx.parent?.constructor.name.includes("Stmt_listContext");
+      
+      // Get the parent contexts
       const parentCtx = ctx.parent?.parent;
       const isLastInBlock = parentCtx instanceof Block_exprContext && 
                            parentCtx.stmt_list()?.stmt() &&
@@ -387,12 +391,14 @@ export class RustLikeCompilerVisitor
       // Visit the expression, which will generate the bytecode for it
       const result = this.visit(ctx.expr());
       
-      // Only add POP if this is not the last expression in a block_expr without an explicit final expression
-      if (!isLastInBlock) {
+      // Do not add POP in these cases:
+      // 1. It's the direct part of a block_expr rule (our new special case)
+      // 2. It's the last statement in a block_expr that doesn't have an explicit final expression
+      if (!isDirectPartOfBlockExpr && !isLastInBlock) {
         this.instructions.push(new Inst(Bytecode.POP));
         console.log("Added POP instruction for expression statement");
       } else {
-        console.log("Skipping POP for last expression in block");
+        console.log("Skipping POP for expression statement that will be returned from block");
       }
       
       return result;
@@ -658,41 +664,71 @@ export class RustLikeCompilerVisitor
     const blockScope = new Frame();
     this.frames.push(blockScope);
     
-    const statements = ctx.stmt_list()?.stmt() || [];
-    const numStatements = statements.length;
-    console.log(`Block has ${numStatements} statements`);
+    // Check which format of block_expr we're dealing with
+    // In TypeScript, we can't directly check property existence, so use runtime type checking
+    // The grammar can have: 
+    // 1. { stmt_list expr? }
+    // 2. { stmt_list_no_trailing expr_stmt }
     
-    // Process all statements in the block
-    for (let i = 0; i < numStatements; i++) {
-      const stmt = statements[i];
-      const isLast = i === numStatements - 1;
+    // Check for final expr (case 1)
+    if (ctx.getChildCount() > 2 && ctx.getChild(1).getChildCount() > 0 && ctx.expr()) {
+      // We have statement list and final expression
+      console.log("Block has statement list and final expression");
       
-      // Special handling for the last statement if it's an expression statement
-      // AND there's no explicit final expression in the block
-      if (isLast && stmt.expr_stmt && !ctx.expr()) {
-        console.log("Last statement is an expression statement");
-        // For the last expr statement, we want to keep its value
-        const expr = stmt.expr_stmt().expr();
-        this.visit(expr);
-        
-        // Don't add POP here - we want to keep the result on the stack
-        console.log("Keeping value of last expression statement");
-      } else {
-        // Normal processing for all other statements
-        this.visit(stmt);
+      // Process statements
+      const stmtListCtx = ctx.getChild(1);
+      if (stmtListCtx) {
+        this.visit(stmtListCtx);
       }
+      
+      // Process final expression
+      console.log("Processing final expression in block");
+      this.visit(ctx.expr()!);
     }
-    
-    // If there's an explicit final expression, evaluate it
-    if (ctx.expr()) {
-      console.log("Block has explicit final expression:", ctx.expr().getText());
-      this.visit(ctx.expr());
-      console.log("Evaluated final expression");
-    }
-    // If the block has no statements and no explicit expression, push a UNIT value
-    else if (numStatements === 0) {
-      console.log("Adding UNIT value (0) for empty block");
-      this.instructions.push(new Inst(Bytecode.LDCI, 0)); // Use 0 as UNIT value
+    // Check if we might have case 2 - a final expr_stmt
+    else {
+      // Using some heuristics to determine the block structure
+      const childCount = ctx.getChildCount();
+      const hasExprStmt = childCount >= 3 && 
+                          ctx.getChild(childCount - 2).getText().includes(';');
+      
+      if (hasExprStmt) {
+        console.log("Block appears to have a final expression statement");
+        
+        // Process all statements before the expr_stmt
+        for (let i = 1; i < childCount - 2; i++) {
+          const child = ctx.getChild(i);
+          if (child && child.getChildCount() > 0) {
+            console.log(`Processing statement ${i-1} in block`);
+            this.visit(child);
+          }
+        }
+        
+        // Process the final expr_stmt but keep its value
+        const finalExprStmt = ctx.getChild(childCount - 2);
+        if (finalExprStmt) {
+          console.log("Processing final expression statement");
+          this.visit(finalExprStmt);
+        }
+      }
+      // Regular block with just statements, no final expression
+      else if (ctx.getChildCount() > 2) {
+        // Process all statements
+        const stmtListCtx = ctx.getChild(1);
+        if (stmtListCtx && stmtListCtx.getChildCount() > 0) {
+          console.log("Block has statement list only");
+          this.visit(stmtListCtx);
+        } else {
+          // Empty block
+          console.log("Block is empty, adding UNIT value");
+          this.instructions.push(new Inst(Bytecode.LDCI, 0)); // Use 0 as UNIT value
+        }
+      }
+      // Empty block
+      else {
+        console.log("Block is empty, adding UNIT value");
+        this.instructions.push(new Inst(Bytecode.LDCI, 0)); // Use 0 as UNIT value
+      }
     }
     
     // Exit block scope
