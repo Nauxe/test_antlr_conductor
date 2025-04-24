@@ -216,11 +216,12 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
     const scanResult = scanner.visit(ctx);
     this.typeEnv = new TypeEnvironment(scanResult);
 
-    // Visit the statement list
-    if (ctx.stmt_list()) {
-      return this.visit(ctx.stmt_list());
+    // Visit the block statement or block expression
+    if (ctx.block_expr()) {
+      return this.visit(ctx.block_expr());
+    } else if (ctx.block_stmt()) {
+      return this.visit(ctx.block_stmt());
     }
-    
     return UNIT_TYPE;
   }
 

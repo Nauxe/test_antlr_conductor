@@ -37,7 +37,3 @@ src/Heap.js
 src/test.js
 src/RustLikeVirtualMachine.js
 src/RustLikeTypeChecker.js
-src/test_block.cjs
-src/test_block_expression.js
-src/test_simple.cjs
-src/test_simple.js
