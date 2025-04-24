@@ -639,10 +639,6 @@ export class RustLikeCompilerVisitor
   visitBlock_expr(ctx: Block_exprContext): Item {
     console.log("Visiting block expression:", ctx.getText());
     
-    // Enter block scope
-    this.instructions.push(new Inst(Bytecode.ENTER_SCOPE, 0));
-    console.log("Added ENTER_SCOPE instruction");
-    
     // Create new frame for the block scope
     const blockScope = new Frame();
     this.frames.push(blockScope);
@@ -677,10 +673,6 @@ export class RustLikeCompilerVisitor
       console.log("Adding UNIT value (0) for block with no tail expression");
       this.instructions.push(new Inst(Bytecode.LDCI, 0)); // Use 0 as UNIT value
     }
-    
-    // Exit block scope
-    this.instructions.push(new Inst(Bytecode.EXIT_SCOPE));
-    console.log("Added EXIT_SCOPE instruction");
     
     // Remove the frame after processing
     this.frames.pop();
