@@ -376,13 +376,24 @@ export class RustLikeCompilerVisitor
   visitExpr_stmt(ctx: Expr_stmtContext): Item {
     try {
       console.log("Visiting expression statement:", ctx.getText());
+      
+      // Get the parent context
+      const parentCtx = ctx.parent?.parent;
+      const isLastInBlock = parentCtx instanceof Block_exprContext && 
+                           parentCtx.stmt_list()?.stmt() &&
+                           parentCtx.stmt_list().stmt().slice(-1)[0] === ctx.parent &&
+                           !parentCtx.expr();
+      
       // Visit the expression, which will generate the bytecode for it
       const result = this.visit(ctx.expr());
       
-      // Add POP instruction to discard the expression result in statement context
-      // This is necessary because expressions in statement context don't return values
-      this.instructions.push(new Inst(Bytecode.POP));
-      console.log("Added POP instruction for expression statement");
+      // Only add POP if this is not the last expression in a block_expr without an explicit final expression
+      if (!isLastInBlock) {
+        this.instructions.push(new Inst(Bytecode.POP));
+        console.log("Added POP instruction for expression statement");
+      } else {
+        console.log("Skipping POP for last expression in block");
+      }
       
       return result;
     } catch (error) {
@@ -657,24 +668,30 @@ export class RustLikeCompilerVisitor
       const isLast = i === numStatements - 1;
       
       // Special handling for the last statement if it's an expression statement
-      if (isLast && stmt instanceof Expr_stmtContext) {
+      // AND there's no explicit final expression in the block
+      if (isLast && stmt.expr_stmt && !ctx.expr()) {
         console.log("Last statement is an expression statement");
         // For the last expr statement, we want to keep its value
-        const expr = stmt.expr();
+        const expr = stmt.expr_stmt().expr();
         this.visit(expr);
         
         // Don't add POP here - we want to keep the result on the stack
-        console.log("Keeping value of last expression");
+        console.log("Keeping value of last expression statement");
       } else {
         // Normal processing for all other statements
         this.visit(stmt);
       }
     }
     
-    // If the block has no statements or no expression statement at the end,
-    // push a UNIT value to represent empty block result
-    if (numStatements === 0 || !(statements[numStatements - 1] instanceof Expr_stmtContext)) {
-      console.log("Adding UNIT value (0) for block with no tail expression");
+    // If there's an explicit final expression, evaluate it
+    if (ctx.expr()) {
+      console.log("Block has explicit final expression:", ctx.expr().getText());
+      this.visit(ctx.expr());
+      console.log("Evaluated final expression");
+    }
+    // If the block has no statements and no explicit expression, push a UNIT value
+    else if (numStatements === 0) {
+      console.log("Adding UNIT value (0) for empty block");
       this.instructions.push(new Inst(Bytecode.LDCI, 0)); // Use 0 as UNIT value
     }
     

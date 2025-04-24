@@ -59,7 +59,7 @@ block_stmt
     ;
 
 block_expr
-  : '{' stmt_list expr '}'
+  : '{' stmt_list expr? '}'  // Allow for an optional final expression
   ;
 
 // ─── Expressions ─────────────────────────────────────────────────────────────
