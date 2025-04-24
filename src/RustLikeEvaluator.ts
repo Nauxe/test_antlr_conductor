@@ -17,6 +17,25 @@ export class RustLikeEvaluator extends BasicEvaluator {
     super(conductor);
   }
 
+  // Helper function to print AST structure
+  private printTree(node: any, indent: number): string {
+    let result = '';
+    const indentStr = ' '.repeat(indent * 2);
+    result += `${indentStr}+ ${node.constructor.name}\n`;
+    
+    try {
+      for (let i = 0; i < node.getChildCount(); i++) {
+        const child = node.getChild(i);
+        result += `${indentStr}  Child ${i}: ${child.constructor.name} - "${child.getText()}"\n`;
+        result += this.printTree(child, indent + 1);
+      }
+    } catch (e) {
+      result += `${indentStr}  (Error printing children: ${e})\n`;
+    }
+    
+    return result;
+  }
+
   async evaluateChunk(chunk: string): Promise<void> {
     this.executionCount++;
     let inputStream: CharStream;
@@ -40,6 +59,10 @@ export class RustLikeEvaluator extends BasicEvaluator {
       // Debug output for the AST
       if (this.isDebug) {
         this.conductor.sendOutput(`AST: ${tree.toStringTree(parser)}`);
+        
+        // Print detailed AST structure
+        const treeStructure = this.printTree(tree, 0);
+        this.conductor.sendOutput(`\nDetailed AST Structure:\n${treeStructure}`);
       }
     } catch (error) {
       // Handle errors and send them to the REPL
@@ -61,8 +84,9 @@ export class RustLikeEvaluator extends BasicEvaluator {
     // Compile
     try {
       this.compilerVisitor.instructions = []; // Reset instructions
+      this.conductor.sendOutput(`\nStarting compilation...`);
       this.compilerVisitor.visit(tree);
-      this.conductor.sendOutput(`Compilation successful.`);
+      this.conductor.sendOutput(`\nCompilation successful.`);
     } catch (error) {
       // Handle errors and send them to the REPL
       this.conductor.sendOutput(`Compile error: ${error instanceof Error ? error.message : String(error)}`);
@@ -70,10 +94,18 @@ export class RustLikeEvaluator extends BasicEvaluator {
     }
 
     if (this.isDebug) {
-      const instructionList = this.compilerVisitor.instructions.map(
-        (inst, index) => `\n[${index}: ${Bytecode[inst.opcode].padEnd(7)} ${inst.operand !== undefined ? JSON.stringify(inst.operand) : ""}]`
-      ).join('');
-      this.conductor.sendOutput(`Compiled instructions: ${instructionList}\n\n -------------------------- \n`);
+      if (this.compilerVisitor.instructions.length > 1) {
+        const instructionList = this.compilerVisitor.instructions.map(
+          (inst, index) => `\n[${index}: ${Bytecode[inst.opcode].padEnd(7)} ${inst.operand !== undefined ? JSON.stringify(inst.operand) : ""}]`
+        ).join('');
+        this.conductor.sendOutput(`Compiled instructions: ${instructionList}\n\n -------------------------- \n`);
+      } else {
+        this.conductor.sendOutput(`Compiled instructions: ${this.compilerVisitor.instructions.map(
+          (inst, index) => `\n[${index}: ${Bytecode[inst.opcode].padEnd(7)} ${inst.operand !== undefined ? JSON.stringify(inst.operand) : ""}]`
+        ).join('')}\n\n -------------------------- \n`);
+        
+        this.conductor.sendOutput(`\nWARNING: Only ${this.compilerVisitor.instructions.length} instruction was generated! This is likely a bug in the compiler.`);
+      }
     }
 
     // Run instructions on the virtual machine

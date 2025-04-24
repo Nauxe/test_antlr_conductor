@@ -28,3 +28,12 @@ src/parser/SimpleLangLexer.interp
 src/parser/SimpleLang.interp
 src/parser/SimpleLangLexer.interp
 src/test.ts
+src/RustLikeCompiler.js
+src/parser/grammar/RustLikeVisitor.js
+src/parser/grammar/RustLikeParser.js
+src/parser/grammar/RustLikeListener.js
+src/parser/grammar/RustLikeLexer.js
+src/Heap.js
+src/test.js
+src/RustLikeVirtualMachine.js
+src/RustLikeTypeChecker.js
