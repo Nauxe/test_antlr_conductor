@@ -1,9 +1,5 @@
 # RustLike Language Implementation
 
-## Project Team
-- Student Name: [Your Name]
-- Student Number: [Your Student Number]
-
 ## Project Title
 Implementation of a RustLike Programming Language with ANTLR4, TypeScript, and a Virtual Machine
 
@@ -236,16 +232,16 @@ print!(3 + 4);
 
 ### Running the Compiler and VM
 
-To run a RustLike program:
+To generate the parser:
 
 ```
-npm run exec -- path/to/your/program.rs
+yarn generate-parser grammar/RustLike.g4
 ```
 
-To start an interactive REPL:
+And then for the index.js:
 
 ```
-npm run repl
+yarn build
 ```
 
 ## Test Cases
