@@ -27,3 +27,4 @@ src/parser/SimpleLang.interp
 src/parser/SimpleLangLexer.interp
 src/parser/SimpleLang.interp
 src/parser/SimpleLangLexer.interp
+src/test.ts

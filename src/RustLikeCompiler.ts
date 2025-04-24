@@ -310,19 +310,36 @@ export class RustLikeCompilerVisitor
   }
 
   visitBlock_stmt(ctx: Block_stmtContext): Item {
+    console.log("Visiting block statement:", ctx.getText());
+    
     // Enter block scope
     this.instructions.push(new Inst(Bytecode.ENTER_SCOPE, 0));
+    console.log("Added ENTER_SCOPE instruction");
 
     // Visit all statements in the block
     if (ctx.stmt_list() && ctx.stmt_list().stmt()) {
       const stmts = ctx.stmt_list().stmt();
+      console.log("Number of statements in block:", stmts.length);
+      
       for (let i = 0; i < stmts.length; i++) {
-        if (stmts[i]) this.visit(stmts[i]);
+        if (stmts[i]) {
+          console.log(`Processing statement ${i} in block:`, 
+            stmts[i].fn_decl() ? "fn_decl" : 
+            stmts[i].decl() ? "decl" : 
+            stmts[i].expr_stmt() ? `expr_stmt(${stmts[i].expr_stmt()?.expr().getText()})` : 
+            "other_stmt"
+          );
+          this.visit(stmts[i]);
+          console.log(`Instructions after statement ${i}:`, this.instructions.length);
+        }
       }
+    } else {
+      console.log("No statements in block");
     }
 
     // Exit block scope
     this.instructions.push(new Inst(Bytecode.EXIT_SCOPE));
+    console.log("Added EXIT_SCOPE instruction");
 
     // Return unit type for block statements
     return this.defaultResult();
@@ -332,10 +349,13 @@ export class RustLikeCompilerVisitor
   visitExpr_stmt(ctx: Expr_stmtContext): Item {
     console.log("Visiting expression statement:", ctx.expr().getText());
     
-    // Visit the expression 
+    // Visit the expression to generate its instructions
     const result = this.visit(ctx.expr());
     
-    // Log the instruction count after visiting the expression
+    // Important: Add a POP instruction after the expression evaluation
+    // since the expression result is left on the stack but not used in a statement context
+    this.instructions.push(new Inst(Bytecode.POP));
+    
     console.log("Instructions after visiting expression:", this.instructions.length);
     
     return result;
