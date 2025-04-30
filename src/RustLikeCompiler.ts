@@ -567,91 +567,28 @@ export class RustLikeCompilerVisitor
       const rhs = ctx.getChild(2) as ExprContext;
       console.log("Binary expression:", lhs.getText(), opTxt, rhs.getText());
 
-      // Visit both operands first
-      this.visit(lhs);
-      this.visit(rhs);
-
-      // Handle the operator
-      if (opTxt === "PLUS") {
-        this.instructions.push(new Inst(Bytecode.PLUS));
-      } else if (opTxt === "MINUS") {
-        this.instructions.push(new Inst(Bytecode.LDCI, -1));
-        this.instructions.push(new Inst(Bytecode.TIMES));
-        this.instructions.push(new Inst(Bytecode.PLUS));
-      } else if (opTxt === "TIMES") {
-        this.instructions.push(new Inst(Bytecode.TIMES));
-      } else if (opTxt === "DIV") {
-        // Handle division
-        const tDivd = this.freshTemp();
-        const tDivs = this.freshTemp();
-        const tQuot = this.freshTemp();
-
-        // declare temps
-        [tDivd, tDivs, tQuot].forEach((name) =>
-          this.instructions.push(
-            new Inst(Bytecode.DECL, {
-              name,
-              rustLikeType: new Item(Tag.NUMBER, 0, 0),
-            })
-          )
-        );
-
-        // dividend = a
-        this.instructions.push(new Inst(Bytecode.ASSIGN, tDivd));
-        // divisor = b
-        this.instructions.push(new Inst(Bytecode.ASSIGN, tDivs));
-        // quotient = 0
-        this.instructions.push(new Inst(Bytecode.LDCI, 0));
-        this.instructions.push(new Inst(Bytecode.ASSIGN, tQuot));
-
-        // loop start
-        const loopStart = this.instructions.length;
-        // if dividend < divisor then exit
-        this.instructions.push(new Inst(Bytecode.LDHS, tDivd));
-        this.instructions.push(new Inst(Bytecode.LDHS, tDivs));
-        this.instructions.push(new Inst(Bytecode.LT));
-        const jof = new Inst(Bytecode.JOF, 0);
-        this.instructions.push(jof);
-
-        // body: dividend = dividend - divisor
-        this.instructions.push(new Inst(Bytecode.LDHS, tDivd));
-        this.instructions.push(new Inst(Bytecode.LDHS, tDivs));
-        this.instructions.push(new Inst(Bytecode.LDCI, -1));
-        this.instructions.push(new Inst(Bytecode.TIMES));
-        this.instructions.push(new Inst(Bytecode.PLUS));
-        this.instructions.push(new Inst(Bytecode.ASSIGN, tDivd));
-
-        // quotient = quotient + 1
-        this.instructions.push(new Inst(Bytecode.LDHS, tQuot));
-        this.instructions.push(new Inst(Bytecode.LDCI, 1));
-        this.instructions.push(new Inst(Bytecode.PLUS));
-        this.instructions.push(new Inst(Bytecode.ASSIGN, tQuot));
-
-        // goto loop start
-        this.instructions.push(new Inst(Bytecode.GOTO, loopStart));
-        // patch exit
-        jof.operand = this.instructions.length;
-
-        // leave result
-        this.instructions.push(new Inst(Bytecode.LDHS, tQuot));
-      } else if (opTxt === "EQ") {
-        this.instructions.push(new Inst(Bytecode.EQ));
-      } else if (opTxt === "NEQ") {
-        this.instructions.push(new Inst(Bytecode.EQ));
-        this.instructions.push(new Inst(Bytecode.NOT));
-      } else if (opTxt === "LT") {
-        this.instructions.push(new Inst(Bytecode.LT));
-      } else if (opTxt === "LTE") {
-        this.instructions.push(new Inst(Bytecode.LT));
-        this.instructions.push(new Inst(Bytecode.NOT));
-      } else if (opTxt === "GT") {
-        this.instructions.push(new Inst(Bytecode.LT));
-      } else if (opTxt === "GTE") {
-        this.instructions.push(new Inst(Bytecode.LT));
-        this.instructions.push(new Inst(Bytecode.NOT));
+      if (OP_TO_BYTE[opTxt]) {
+        console.log("Found operator in OP_TO_BYTE map:", opTxt);
+        this.visit(lhs);
+        this.visit(rhs);
+        this.instructions.push(new Inst(OP_TO_BYTE[opTxt]));
+        console.log("Added binary op instruction:", OP_TO_BYTE[opTxt]);
+        return this.defaultResult();
+      } else {
+        // Handle operators not in OP_TO_BYTE by visiting as a binary operation
+        console.log("Operator not in OP_TO_BYTE map, treating as binary operation");
+        this.visit(lhs);
+        this.visit(rhs);
+        if (opTxt === "-") {
+          this.instructions.push(new Inst(Bytecode.LDCI, -1));
+          this.instructions.push(new Inst(Bytecode.TIMES));
+          this.instructions.push(new Inst(Bytecode.PLUS));
+        } else {
+          // For other operators, use the appropriate bytecode
+          this.instructions.push(new Inst(Bytecode[opTxt.toUpperCase()]));
+        }
+        return this.defaultResult();
       }
-
-      return this.defaultResult();
     }
     
     console.log("Using visitChildren for expression");
