@@ -76,8 +76,7 @@ expr
     | '*' expr                                   # derefExpr
     | expr '[' expr ']'                          # indexExpr
     | expr '(' arg_list_opt ')'                  # callExpr
-    | expr ('*' | '/') expr                      # mulDivExpr
-    | expr ('+' | '-') expr                      # addSubExpr
+    | expr ('+' | '-' | '*' | '/') expr          # binaryOpExpr
     | expr ('==' | '!=' | '<' | '<=' | '>' | '>=') expr # comparisonExpr
     | expr BOOL_BINOP expr                       # logicalExpr
     | primary                                    # primaryExpr
