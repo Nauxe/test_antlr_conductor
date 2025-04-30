@@ -260,7 +260,6 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   }
 
   visitBlock_expr(ctx: Block_exprContext): RustLikeType {
-    try {
       // Create a new scope for the block
       const scanRes: ScanResult = new ScopedScannerVisitor(ctx).visit(ctx);
       this.typeEnv = this.typeEnv.extend(scanRes);
@@ -284,10 +283,6 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
       // Exit block scope
       this.typeEnv = this.typeEnv.parent;
       return result;
-    } catch (error) {
-      console.error("Error in block expression:", error);
-      throw error;
-    }
   }
 
   visitBool_expr(ctx: Bool_exprContext): RustLikeType {
@@ -406,7 +401,6 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   }
 
   visitCallExpr(ctx: CallExprContext): RustLikeType {
-    try {
       // Visit the function expression to get its type
       const fnType = this.visit(ctx.expr());
       if (fnType.tag !== Tag.CLOSURE) {
@@ -429,14 +423,9 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
       }
 
       return fnClosure.retType;
-    } catch (error) {
-      console.error("Error in function call:", error);
-      throw error;
-    }
   }
 
   visitTerminal(_node: TerminalNode): RustLikeType {
-    try {
       switch (_node.getSymbol().type) {
         case RustLikeParser.IDENTIFIER: {
           const name = _node.getText();
@@ -468,10 +457,6 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
           return UNIT_TYPE;
         }
       }
-    } catch (error) {
-      console.error("Error in terminal:", error);
-      throw error;
-    }
   }
 
   //
@@ -491,7 +476,6 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   }
 
   visitFn_decl(ctx: Fn_declContext): RustLikeType {
-    try {
       const name = ctx.IDENTIFIER().getText();
       const block = ctx.block_expr() === null ? ctx.block_stmt() : ctx.block_expr();
       let fnType: FnType;
@@ -542,10 +526,6 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
       // Add declaration
       this.typeEnv.types.set(name, fnType);
       return UNIT_TYPE;
-    } catch (error) {
-      console.error("Error in function declaration:", error);
-      throw error;
-    }
   }
 
   visitPrint_stmt(ctx: Print_stmtContext): RustLikeType {
@@ -590,7 +570,6 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
   }
 
   visitBlock_stmt(ctx: Block_stmtContext): RustLikeType {
-    try {
       // Create a new scope for the block
       const scanRes: ScanResult = new ScopedScannerVisitor(ctx).visit(ctx);
       this.typeEnv = this.typeEnv.extend(scanRes);
@@ -606,10 +585,6 @@ export class RustLikeTypeCheckerVisitor extends AbstractParseTreeVisitor<RustLik
       // Exit block scope
       this.typeEnv = this.typeEnv.parent;
       return UNIT_TYPE;
-    } catch (error) {
-      console.error("Error in block statement:", error);
-      throw error;
-    }
   }
 }
 
