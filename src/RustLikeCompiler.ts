@@ -40,10 +40,10 @@ class Frame {
 /*  map supported infix operators to byte-code instruction  */
 // only include those the VM natively supports
 const OP_TO_BYTE: Record<string, Bytecode> = {
-  "PLUS": Bytecode.PLUS,
-  "TIMES": Bytecode.TIMES,
-  "LT": Bytecode.LT,
-  "EQ": Bytecode.EQ,
+  "+": Bytecode.PLUS,
+  "*": Bytecode.TIMES,
+  "<": Bytecode.LT,
+  "==": Bytecode.EQ,
 };
 
 export class RustLikeCompilerVisitor
@@ -398,25 +398,48 @@ export class RustLikeCompilerVisitor
   }
 
   visitPrimary(ctx: PrimaryContext): Item {
-    if (ctx.u32_expr()) return this.visit(ctx.u32_expr()!);
-    if (ctx.str_expr()) return this.visit(ctx.str_expr()!);
-    if (ctx.bool_expr()) return this.visit(ctx.bool_expr()!);
-
-    /* treat "true / false" identifiers as literals         */
-    if (ctx.IDENTIFIER()) {
-      const name = ctx.IDENTIFIER()!.getText();
-      if (name === "true" || name === "false") {
-        this.instructions.push(
-          new Inst(Bytecode.LDCB, name === "true")
-        );
-      } else {
-        this.instructions.push(new Inst(Bytecode.LDHS, name));
-      }
-      return this.defaultResult();
-    }
-
-    if (ctx.expr()) return this.visit(ctx.expr()!); // parenthesised
+    console.log("Visiting primary:", ctx.getText());
     return this.visitChildren(ctx);
+  }
+
+  visitIntLiteral(ctx: any): Item {
+    console.log("Visiting integer literal:", ctx.getText());
+    const value = parseInt(ctx.INT().getText(), 10);
+    console.log("Parsed integer value:", value);
+    this.instructions.push(new Inst(Bytecode.LDCI, value));
+    return this.defaultResult();
+  }
+
+  visitFloatLiteral(ctx: any): Item {
+    console.log("Visiting float literal:", ctx.getText());
+    const value = parseFloat(ctx.FLOAT().getText());
+    console.log("Parsed float value:", value);
+    this.instructions.push(new Inst(Bytecode.LDCI, Math.floor(value))); // Convert to integer for now
+    return this.defaultResult();
+  }
+
+  visitTrueLiteral(ctx: any): Item {
+    console.log("Visiting true literal");
+    this.instructions.push(new Inst(Bytecode.LDCB, true));
+    return this.defaultResult();
+  }
+
+  visitFalseLiteral(ctx: any): Item {
+    console.log("Visiting false literal");
+    this.instructions.push(new Inst(Bytecode.LDCB, false));
+    return this.defaultResult();
+  }
+
+  visitIdentifier(ctx: any): Item {
+    console.log("Visiting identifier:", ctx.getText());
+    const name = ctx.ID().getText();
+    this.instructions.push(new Inst(Bytecode.LDHS, name));
+    return this.defaultResult();
+  }
+
+  visitParenExpr(ctx: any): Item {
+    console.log("Visiting parenthesized expression:", ctx.getText());
+    return this.visit(ctx.expr());
   }
 
   /* ───── literals ───── */
@@ -461,7 +484,7 @@ export class RustLikeCompilerVisitor
     
     console.log("Binary operation:", lhs.getText(), op, rhs.getText());
 
-    if (op === "MINUS") {
+    if (op === "-") {
       console.log("Generating subtraction code");
       // a - b  ⇒  a; b; -1; TIMES; PLUS
       this.visit(lhs);
@@ -470,7 +493,7 @@ export class RustLikeCompilerVisitor
       this.instructions.push(new Inst(Bytecode.TIMES));
       this.instructions.push(new Inst(Bytecode.PLUS));
       console.log("Added subtraction instructions, count:", this.instructions.length);
-    } else if (op === "DIV") {
+    } else if (op === "/") {
       console.log("Generating division code");
       // Handle division similarly to before
       // ... existing division code ...
@@ -543,119 +566,7 @@ export class RustLikeCompilerVisitor
     console.log("Visiting expression:", ctx.getText());
     console.log("Child count:", ctx.getChildCount());
     
-    if (ctx.getChildCount() === 2) {
-      // Handle unary operators including ref and deref
-      const op = ctx.getChild(0).getText();
-      const expr = ctx.getChild(1) as ExprContext;
-      console.log("Unary expression:", op, expr.getText());
-
-      if (op === '&') {
-        this.visit(expr);
-        this.instructions.push(new Inst(Bytecode.REF));
-        console.log("Added REF instruction");
-        return this.defaultResult();
-      } else if (op === '*') {
-        this.visit(expr);
-        this.instructions.push(new Inst(Bytecode.DEREF));
-        console.log("Added DEREF instruction");
-        return this.defaultResult();
-      }
-    }
-
-    if (ctx.getChildCount() === 3) {
-      const lhs = ctx.getChild(0) as ExprContext;
-      const opTxt = ctx.getChild(1).getText();
-      const rhs = ctx.getChild(2) as ExprContext;
-      console.log("Binary expression:", lhs.getText(), opTxt, rhs.getText());
-
-      // Visit both operands first
-      this.visit(lhs);
-      this.visit(rhs);
-
-      // Handle the operator
-      if (opTxt === "+") {
-        this.instructions.push(new Inst(Bytecode.PLUS));
-      } else if (opTxt === "-") {
-        this.instructions.push(new Inst(Bytecode.LDCI, -1));
-        this.instructions.push(new Inst(Bytecode.TIMES));
-        this.instructions.push(new Inst(Bytecode.PLUS));
-      } else if (opTxt === "*") {
-        this.instructions.push(new Inst(Bytecode.TIMES));
-      } else if (opTxt === "/") {
-        // Handle division
-        const tDivd = this.freshTemp();
-        const tDivs = this.freshTemp();
-        const tQuot = this.freshTemp();
-
-        // declare temps
-        [tDivd, tDivs, tQuot].forEach((name) =>
-          this.instructions.push(
-            new Inst(Bytecode.DECL, {
-              name,
-              rustLikeType: new Item(Tag.NUMBER, 0, 0),
-            })
-          )
-        );
-
-        // dividend = a
-        this.instructions.push(new Inst(Bytecode.ASSIGN, tDivd));
-        // divisor = b
-        this.instructions.push(new Inst(Bytecode.ASSIGN, tDivs));
-        // quotient = 0
-        this.instructions.push(new Inst(Bytecode.LDCI, 0));
-        this.instructions.push(new Inst(Bytecode.ASSIGN, tQuot));
-
-        // loop start
-        const loopStart = this.instructions.length;
-        // if dividend < divisor then exit
-        this.instructions.push(new Inst(Bytecode.LDHS, tDivd));
-        this.instructions.push(new Inst(Bytecode.LDHS, tDivs));
-        this.instructions.push(new Inst(Bytecode.LT));
-        const jof = new Inst(Bytecode.JOF, 0);
-        this.instructions.push(jof);
-
-        // body: dividend = dividend - divisor
-        this.instructions.push(new Inst(Bytecode.LDHS, tDivd));
-        this.instructions.push(new Inst(Bytecode.LDHS, tDivs));
-        this.instructions.push(new Inst(Bytecode.LDCI, -1));
-        this.instructions.push(new Inst(Bytecode.TIMES));
-        this.instructions.push(new Inst(Bytecode.PLUS));
-        this.instructions.push(new Inst(Bytecode.ASSIGN, tDivd));
-
-        // quotient = quotient + 1
-        this.instructions.push(new Inst(Bytecode.LDHS, tQuot));
-        this.instructions.push(new Inst(Bytecode.LDCI, 1));
-        this.instructions.push(new Inst(Bytecode.PLUS));
-        this.instructions.push(new Inst(Bytecode.ASSIGN, tQuot));
-
-        // goto loop start
-        this.instructions.push(new Inst(Bytecode.GOTO, loopStart));
-        // patch exit
-        jof.operand = this.instructions.length;
-
-        // leave result
-        this.instructions.push(new Inst(Bytecode.LDHS, tQuot));
-      } else if (opTxt === "==") {
-        this.instructions.push(new Inst(Bytecode.EQ));
-      } else if (opTxt === "!=") {
-        this.instructions.push(new Inst(Bytecode.EQ));
-        this.instructions.push(new Inst(Bytecode.NOT));
-      } else if (opTxt === "<") {
-        this.instructions.push(new Inst(Bytecode.LT));
-      } else if (opTxt === "<=") {
-        this.instructions.push(new Inst(Bytecode.LT));
-        this.instructions.push(new Inst(Bytecode.NOT));
-      } else if (opTxt === ">") {
-        this.instructions.push(new Inst(Bytecode.LT));
-      } else if (opTxt === ">=") {
-        this.instructions.push(new Inst(Bytecode.LT));
-        this.instructions.push(new Inst(Bytecode.NOT));
-      }
-
-      return this.defaultResult();
-    }
-    
-    console.log("Using visitChildren for expression");
+    // Let the visitor pattern handle the delegation based on the labeled alternatives
     return this.visitChildren(ctx);
   }
 
@@ -931,6 +842,156 @@ export class RustLikeCompilerVisitor
     }
     
     console.log("Unable to process direct expression, no pattern matched");
+  }
+
+  visitAddSubExpr(ctx: any): Item {
+    console.log("Visiting add/sub expression:", ctx.getText());
+    
+    const lhs = ctx.expr(0);
+    const rhs = ctx.expr(1);
+    const op = ctx.op.text;
+    
+    console.log("Add/Sub operation:", lhs.getText(), op, rhs.getText());
+
+    this.visit(lhs);
+    this.visit(rhs);
+
+    if (op === "-") {
+      console.log("Generating subtraction code");
+      this.instructions.push(new Inst(Bytecode.LDCI, -1));
+      this.instructions.push(new Inst(Bytecode.TIMES));
+      this.instructions.push(new Inst(Bytecode.PLUS));
+    } else {
+      console.log("Generating addition code");
+      this.instructions.push(new Inst(Bytecode.PLUS));
+    }
+
+    return this.defaultResult();
+  }
+
+  visitMulDivModExpr(ctx: any): Item {
+    console.log("Visiting mul/div/mod expression:", ctx.getText());
+    
+    const lhs = ctx.expr(0);
+    const rhs = ctx.expr(1);
+    const op = ctx.op.text;
+    
+    console.log("Mul/Div/Mod operation:", lhs.getText(), op, rhs.getText());
+
+    this.visit(lhs);
+    this.visit(rhs);
+
+    if (op === "*") {
+      console.log("Generating multiplication code");
+      this.instructions.push(new Inst(Bytecode.TIMES));
+    } else if (op === "/") {
+      console.log("Generating division code");
+      // Handle division using repeated subtraction
+      const tDivd = this.freshTemp();
+      const tDivs = this.freshTemp();
+      const tQuot = this.freshTemp();
+
+      // declare temps
+      [tDivd, tDivs, tQuot].forEach((name) =>
+        this.instructions.push(
+          new Inst(Bytecode.DECL, {
+            name,
+            rustLikeType: new Item(Tag.NUMBER, 0, 0),
+          })
+        )
+      );
+
+      // dividend = a
+      this.instructions.push(new Inst(Bytecode.ASSIGN, tDivd));
+      // divisor = b
+      this.instructions.push(new Inst(Bytecode.ASSIGN, tDivs));
+      // quotient = 0
+      this.instructions.push(new Inst(Bytecode.LDCI, 0));
+      this.instructions.push(new Inst(Bytecode.ASSIGN, tQuot));
+
+      // loop start
+      const loopStart = this.instructions.length;
+      // if dividend < divisor then exit
+      this.instructions.push(new Inst(Bytecode.LDHS, tDivd));
+      this.instructions.push(new Inst(Bytecode.LDHS, tDivs));
+      this.instructions.push(new Inst(Bytecode.LT));
+      const jof = new Inst(Bytecode.JOF, 0);
+      this.instructions.push(jof);
+
+      // body: dividend = dividend - divisor
+      this.instructions.push(new Inst(Bytecode.LDHS, tDivd));
+      this.instructions.push(new Inst(Bytecode.LDHS, tDivs));
+      this.instructions.push(new Inst(Bytecode.LDCI, -1));
+      this.instructions.push(new Inst(Bytecode.TIMES));
+      this.instructions.push(new Inst(Bytecode.PLUS));
+      this.instructions.push(new Inst(Bytecode.ASSIGN, tDivd));
+
+      // quotient = quotient + 1
+      this.instructions.push(new Inst(Bytecode.LDHS, tQuot));
+      this.instructions.push(new Inst(Bytecode.LDCI, 1));
+      this.instructions.push(new Inst(Bytecode.PLUS));
+      this.instructions.push(new Inst(Bytecode.ASSIGN, tQuot));
+
+      // goto loop start
+      this.instructions.push(new Inst(Bytecode.GOTO, loopStart));
+      // patch exit
+      jof.operand = this.instructions.length;
+
+      // leave result
+      this.instructions.push(new Inst(Bytecode.LDHS, tQuot));
+    } else if (op === "%") {
+      console.log("Generating modulo code");
+      // Handle modulo using division and multiplication
+      // a % b = a - (a/b * b)
+      
+      // Save a in a temp
+      const tA = this.freshTemp();
+      this.instructions.push(
+        new Inst(Bytecode.DECL, {
+          name: tA,
+          rustLikeType: new Item(Tag.NUMBER, 0, 0),
+        })
+      );
+      this.instructions.push(new Inst(Bytecode.ASSIGN, tA));
+
+      // Save b in a temp
+      const tB = this.freshTemp();
+      this.instructions.push(
+        new Inst(Bytecode.DECL, {
+          name: tB,
+          rustLikeType: new Item(Tag.NUMBER, 0, 0),
+        })
+      );
+      this.instructions.push(new Inst(Bytecode.ASSIGN, tB));
+
+      // Load a and b for division
+      this.instructions.push(new Inst(Bytecode.LDHS, tA));
+      this.instructions.push(new Inst(Bytecode.LDHS, tB));
+
+      // Do division (reuses the division code above)
+      this.visitMulDivModExpr({
+        expr: () => [],
+        op: { text: "/" },
+        getChildCount: () => 3,
+        getChild: (i: number) => ({
+          getText: () => i === 1 ? "/" : "",
+        }),
+      });
+
+      // Multiply by b
+      this.instructions.push(new Inst(Bytecode.LDHS, tB));
+      this.instructions.push(new Inst(Bytecode.TIMES));
+
+      // Subtract from original a
+      this.instructions.push(new Inst(Bytecode.LDHS, tA));
+      this.instructions.push(new Inst(Bytecode.LDCI, -1));
+      this.instructions.push(new Inst(Bytecode.TIMES));
+      this.instructions.push(new Inst(Bytecode.PLUS));
+      this.instructions.push(new Inst(Bytecode.LDCI, -1));
+      this.instructions.push(new Inst(Bytecode.TIMES));
+    }
+
+    return this.defaultResult();
   }
 }
 
