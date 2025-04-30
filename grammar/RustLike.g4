@@ -84,7 +84,7 @@ expr
     ;
 
 primary
-    : U32                                       # u32_expr
+    : u32_expr
     | str_expr
     | bool_expr
     | IDENTIFIER

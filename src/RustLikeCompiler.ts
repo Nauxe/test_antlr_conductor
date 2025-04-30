@@ -421,10 +421,9 @@ export class RustLikeCompilerVisitor
 
   /* ───── literals ───── */
   visitU32_expr(ctx: U32_exprContext): Item {
-    console.log("Visiting U32 expression:", ctx.getText());
-    const value = parseInt(ctx.getText(), 10);
-    console.log("Parsed U32 value:", value);
-    this.instructions.push(new Inst(Bytecode.LDCI, value));
+    this.instructions.push(
+      new Inst(Bytecode.LDCI, parseInt(ctx.U32().getText(), 10))
+    );
     return this.defaultResult();
   }
 
