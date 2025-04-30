@@ -76,8 +76,7 @@ expr
     | '*' expr                                   # derefExpr
     | expr '[' expr ']'                          # indexExpr
     | expr '(' arg_list_opt ')'                  # callExpr
-    | expr (PLUS | MINUS | TIMES | DIV) expr     # binaryOpExpr
-    | expr (EQ | NEQ | LT | LTE | GT | GTE) expr # comparisonExpr
+    | expr INT_OP expr                           # binaryOpExpr
     | expr BOOL_BINOP expr                       # logicalExpr
     | primary                                    # primaryExpr
     ;
@@ -143,16 +142,7 @@ U32        : DIGIT+ ;
 STRING     : '"' (~["\\])* '"' ;
 IDENTIFIER : LETTER LETTER* ;
 BOOL       : 'true' | 'false' ;
-PLUS       : '+' ;
-MINUS      : '-' ;
-TIMES      : '*' ;
-DIV        : '/' ;
-EQ         : '==' ;
-NEQ        : '!=' ;
-LT         : '<' ;
-LTE        : '<=' ;
-GT         : '>' ;
-GTE        : '>=' ;
+INT_OP     : '+' | '-' | '*' | '/' | '!=' | '==' | '<' | '<=' | '>' | '>=' ;
 BOOL_BINOP : '||' | '&&' ;
 BOOL_OP    : '!' ;
 

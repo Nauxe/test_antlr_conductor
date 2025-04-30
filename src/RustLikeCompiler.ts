@@ -40,10 +40,10 @@ class Frame {
 /*  map supported infix operators to byte-code instruction  */
 // only include those the VM natively supports
 const OP_TO_BYTE: Record<string, Bytecode> = {
-  "PLUS": Bytecode.PLUS,
-  "TIMES": Bytecode.TIMES,
-  "LT": Bytecode.LT,
-  "EQ": Bytecode.EQ,
+  "+": Bytecode.PLUS,
+  "*": Bytecode.TIMES,
+  "<": Bytecode.LT,
+  "==": Bytecode.EQ,
 };
 
 export class RustLikeCompilerVisitor
@@ -456,11 +456,11 @@ export class RustLikeCompilerVisitor
     
     const lhs = ctx.expr(0);
     const rhs = ctx.expr(1);
-    const op = ctx.getChild(1).getText();
+    const op = ctx.INT_OP().getText();
     
     console.log("Binary operation:", lhs.getText(), op, rhs.getText());
 
-    if (op === "MINUS") {
+    if (op === "-") {
       console.log("Generating subtraction code");
       // a - b  ⇒  a; b; -1; TIMES; PLUS
       this.visit(lhs);
@@ -469,12 +469,104 @@ export class RustLikeCompilerVisitor
       this.instructions.push(new Inst(Bytecode.TIMES));
       this.instructions.push(new Inst(Bytecode.PLUS));
       console.log("Added subtraction instructions, count:", this.instructions.length);
-    } else if (op === "DIV") {
-      console.log("Generating division code");
-      // Handle division similarly to before
-      // ... existing division code ...
+
+    } else if (op === "/" || op === "%") {
+      console.log("Generating division/modulo code");
+      // a / b or a % b ⇒ repeated subtraction loop
+      const tDivd = this.freshTemp();
+      const tDivs = this.freshTemp();
+      const tQuot = this.freshTemp();
+
+      // declare temps
+      [tDivd, tDivs, tQuot].forEach((name) =>
+        this.instructions.push(
+          new Inst(Bytecode.DECL, {
+            name,
+            rustLikeType: new Item(Tag.NUMBER, 0, 0),
+          })
+        )
+      );
+
+      // dividend = a
+      this.visit(lhs);
+      this.instructions.push(new Inst(Bytecode.ASSIGN, tDivd));
+      // divisor = b
+      this.visit(rhs);
+      this.instructions.push(new Inst(Bytecode.ASSIGN, tDivs));
+      // quotient = 0
+      this.instructions.push(new Inst(Bytecode.LDCI, 0));
+      this.instructions.push(new Inst(Bytecode.ASSIGN, tQuot));
+
+      // loop start
+      const loopStart = this.instructions.length;
+      // if dividend < divisor then exit
+      this.instructions.push(new Inst(Bytecode.LDHS, tDivd));
+      this.instructions.push(new Inst(Bytecode.LDHS, tDivs));
+      this.instructions.push(new Inst(Bytecode.LT));
+      const jof = new Inst(Bytecode.JOF, 0);
+      this.instructions.push(jof);
+
+      // body: dividend = dividend - divisor
+      this.instructions.push(new Inst(Bytecode.LDHS, tDivd));
+      this.instructions.push(new Inst(Bytecode.LDHS, tDivs));
+      this.instructions.push(new Inst(Bytecode.LDCI, -1));
+      this.instructions.push(new Inst(Bytecode.TIMES));
+      this.instructions.push(new Inst(Bytecode.PLUS));
+      this.instructions.push(new Inst(Bytecode.ASSIGN, tDivd));
+
+      // quotient = quotient + 1
+      this.instructions.push(new Inst(Bytecode.LDHS, tQuot));
+      this.instructions.push(new Inst(Bytecode.LDCI, 1));
+      this.instructions.push(new Inst(Bytecode.PLUS));
+      this.instructions.push(new Inst(Bytecode.ASSIGN, tQuot));
+
+      // goto loop start
+      this.instructions.push(new Inst(Bytecode.GOTO, loopStart));
+      // patch exit
+      jof.operand = this.instructions.length;
+
+      // leave result
+      const resultTemp = op === "/" ? tQuot : tDivd;
+      this.instructions.push(new Inst(Bytecode.LDHS, resultTemp));
+      console.log("Added division/modulo instructions");
+
+    } else if (op === ">") {
+      console.log("Generating greater-than code");
+      // a > b ⇒ b < a
+      this.visit(rhs);
+      this.visit(lhs);
+      this.instructions.push(new Inst(Bytecode.LT));
+      console.log("Added greater-than instructions");
+
+    } else if (op === "<=") {
+      console.log("Generating less-than-or-equal code");
+      // a <= b ⇒ !(b < a)
+      this.visit(rhs);
+      this.visit(lhs);
+      this.instructions.push(new Inst(Bytecode.LT));
+      this.instructions.push(new Inst(Bytecode.NOT));
+      console.log("Added less-than-or-equal instructions");
+
+    } else if (op === ">=") {
+      console.log("Generating greater-than-or-equal code");
+      // a >= b ⇒ !(a < b)
+      this.visit(lhs);
+      this.visit(rhs);
+      this.instructions.push(new Inst(Bytecode.LT));
+      this.instructions.push(new Inst(Bytecode.NOT));
+      console.log("Added greater-than-or-equal instructions");
+
+    } else if (op === "!=") {
+      console.log("Generating not-equal code");
+      // a != b ⇒ !(a == b)
+      this.visit(lhs);
+      this.visit(rhs);
+      this.instructions.push(new Inst(Bytecode.EQ));
+      this.instructions.push(new Inst(Bytecode.NOT));
+      console.log("Added not-equal instructions");
+
     } else {
-      console.log(`Generating code for operator: ${op}`);
+      console.log(`Generating fallback code for operator: ${op}`);
       // fallback for +, *, <, ==
       this.visit(lhs);
       this.visit(rhs);
@@ -483,46 +575,6 @@ export class RustLikeCompilerVisitor
     }
 
     console.log("Binary op expression result, instruction count:", this.instructions.length);
-    return this.defaultResult();
-  }
-
-  visitComparisonExpr(ctx: any): Item {
-    const lhs = ctx.expr(0);
-    const rhs = ctx.expr(1);
-    const op = ctx.getChild(1).getText();
-    
-    console.log("Comparison operation:", lhs.getText(), op, rhs.getText());
-
-    if (op === "GT") {
-      // a > b ⇒ b < a
-      this.visit(rhs);
-      this.visit(lhs);
-      this.instructions.push(new Inst(Bytecode.LT));
-    } else if (op === "LTE") {
-      // a <= b ⇒ !(b < a)
-      this.visit(rhs);
-      this.visit(lhs);
-      this.instructions.push(new Inst(Bytecode.LT));
-      this.instructions.push(new Inst(Bytecode.NOT));
-    } else if (op === "GTE") {
-      // a >= b ⇒ !(a < b)
-      this.visit(lhs);
-      this.visit(rhs);
-      this.instructions.push(new Inst(Bytecode.LT));
-      this.instructions.push(new Inst(Bytecode.NOT));
-    } else if (op === "NEQ") {
-      // a != b ⇒ !(a == b)
-      this.visit(lhs);
-      this.visit(rhs);
-      this.instructions.push(new Inst(Bytecode.EQ));
-      this.instructions.push(new Inst(Bytecode.NOT));
-    } else {
-      // For EQ and LT, use the bytecode directly
-      this.visit(lhs);
-      this.visit(rhs);
-      this.instructions.push(new Inst(OP_TO_BYTE[op]));
-    }
-
     return this.defaultResult();
   }
 
