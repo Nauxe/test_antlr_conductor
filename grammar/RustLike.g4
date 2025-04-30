@@ -78,7 +78,7 @@ expr
     | expr '(' arg_list_opt ')'                  # callExpr
     | expr (TIMES | DIV) expr                    # mulDivExpr
     | expr (PLUS | MINUS) expr                   # addSubExpr
-    | expr ('==' | '!=' | '<' | '<=' | '>' | '>=') expr # comparisonExpr
+    | expr (EQ | NEQ | LT | LTE | GT | GTE) expr # comparisonExpr
     | expr BOOL_BINOP expr                       # logicalExpr
     | primary                                    # primaryExpr
     ;
@@ -140,9 +140,9 @@ type_list_opt
     ;
 
 // ─── Lexer Rules ─────────────────────────────────────────────────────────────
-U32        : DIGIT+ ;
+U32        : [0-9]+ ;
 STRING     : '"' (~["\\])* '"' ;
-IDENTIFIER : LETTER LETTER* ;
+IDENTIFIER : [a-zA-Z][a-zA-Z0-9_]* ;
 BOOL       : 'true' | 'false' ;
 BOOL_BINOP : '||' | '&&' ;
 BOOL_OP    : '!' ;
@@ -153,8 +153,13 @@ MINUS      : '-' ;
 TIMES      : '*' ;
 DIV        : '/' ;
 
-fragment DIGIT  : [0-9] ;
-fragment LETTER : [a-zA-Z] ;
+// Comparison operators
+EQ         : '==' ;
+NEQ        : '!=' ;
+LT         : '<'  ;
+LTE        : '<=' ;
+GT         : '>'  ;
+GTE        : '>=' ;
 
 WS           : [ \t\r\n]+ -> skip ;
 LINE_COMMENT : '//' ~[\r\n]* -> skip ;
