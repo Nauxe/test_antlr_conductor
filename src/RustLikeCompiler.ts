@@ -626,10 +626,21 @@ export class RustLikeCompilerVisitor
         this.instructions.push(new Inst(OP_TO_BYTE[opTxt]));
         console.log("Added binary op instruction:", OP_TO_BYTE[opTxt]);
         return this.defaultResult();
+      } else {
+        // Handle operators not in OP_TO_BYTE by visiting as a binary operation
+        console.log("Operator not in OP_TO_BYTE map, treating as binary operation");
+        this.visit(lhs);
+        this.visit(rhs);
+        if (opTxt === "-") {
+          this.instructions.push(new Inst(Bytecode.LDCI, -1));
+          this.instructions.push(new Inst(Bytecode.TIMES));
+          this.instructions.push(new Inst(Bytecode.PLUS));
+        } else {
+          // For other operators, use the appropriate bytecode
+          this.instructions.push(new Inst(Bytecode[opTxt.toUpperCase()]));
+        }
+        return this.defaultResult();
       }
-
-      // all other binary ops handled above in visitBinaryOpExpr
-      console.log("Binary operator not in OP_TO_BYTE map, using visitChildren");
     }
     
     console.log("Using visitChildren for expression");
