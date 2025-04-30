@@ -84,15 +84,16 @@ expr
     ;
 
 primary
-    : U32 # u32Literal
-    | BOOL # boolLiteral
-    | STRING # stringLiteral
-    | IDENTIFIER # identifier
-    | LPAREN expr RPAREN # parenExpr
-    | block_expr # blockExpr
-    | if_expr # ifExpr
-    | array_literal # arrayLiteral
-    | range_expr # rangeExpr
+    : U32                                       # u32_expr
+    | str_expr
+    | bool_expr
+    | IDENTIFIER
+    | '(' expr ')'                               // parenthesized
+    | if_expr
+    | array_literal
+    | tuple_expr
+    | range_expr
+    | block_expr
     ;
 
 arg_list_opt
@@ -115,10 +116,11 @@ tuple_expr
 
 // Range expression
 range_expr
-    : U32 '..' U32
+    : u32_expr '..' u32_expr
     ;
 
 // ─── Leaf Expressions ────────────────────────────────────────────────────────
+u32_expr   : U32 ;
 str_expr   : STRING ('+' STRING)? ;
 bool_expr  : BOOL ;
 
@@ -161,6 +163,3 @@ GTE        : '>=' ;
 
 WS           : [ \t\r\n]+ -> skip ;
 LINE_COMMENT : '//' ~[\r\n]* -> skip ;
-
-LPAREN : '(' ;
-RPAREN : ')' ;
