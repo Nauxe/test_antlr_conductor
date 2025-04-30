@@ -1,69 +1,166 @@
 grammar RustLike;
 
-// Keywords and basic tokens
-SEMI: ';';
-COMMA: ',';
-LPAREN: '(';
-RPAREN: ')';
-LBRACE: '{';
-RBRACE: '}';
-
-// Operators
-PLUS: '+';
-MINUS: '-';
-TIMES: '*';
-DIV: '/';
-MOD: '%';
-EQ: '==';
-NEQ: '!=';
-LT: '<';
-GT: '>';
-LTE: '<=';
-GTE: '>=';
-AND: '&&';
-OR: '||';
-NOT: '!';
-
-// Literals and identifiers
-ID: [a-zA-Z_][a-zA-Z0-9_]*;
-INT: [0-9]+;
-FLOAT: [0-9]+ '.' [0-9]+;
-TRUE: 'true';
-FALSE: 'false';
-
-// Skip whitespace and comments
-WS: [ \t\r\n]+ -> skip;
-COMMENT: '//' ~[\r\n]* -> skip;
-BLOCK_COMMENT: '/*' .*? '*/' -> skip;
-
-// Program structure
-prog: stmt* EOF;
-
-stmt
-    : expr SEMI                    # ExprStmt
-    | block                        # BlockStmt
+// ─── Entry Point ─────────────────────────────────────────────────────────────
+prog
+    : stmt_list EOF
     ;
 
-block: LBRACE stmt* RBRACE;
+// ─── Statements ──────────────────────────────────────────────────────────────
+stmt_list
+    : stmt+
+    ;
 
+stmt
+    : decl                     // immutable variable declaration
+    | fn_decl                  // function declaration
+    | print_stmt               // print statement
+    | if_stmt                  // if‑statement
+    | while_loop               // while loop
+    | break_stmt               // break;
+    | continue_stmt            // continue;
+    | expr_stmt                // any expr as statement
+    | block_stmt               // nested block
+    ;
+
+// ─── Declarations ────────────────────────────────────────────────────────────
+decl
+    : 'let' IDENTIFIER ':' type '=' expr ';'
+    ;
+
+// ─── Functions ───────────────────────────────────────────────────────────────
+fn_decl
+    : 'fn' IDENTIFIER '(' param_list_opt ')' '->' type (block_stmt | block_expr)
+    ;
+
+param_list_opt 
+    : /* empty */
+    | param_list
+    ;
+param_list
+    : param (',' param)*
+    ;
+param
+    : IDENTIFIER ':' type
+    ;
+
+// ─── Simple statements ───────────────────────────────────────────────────────
+print_stmt      : 'print!' '(' expr ')' ';' ;
+break_stmt      : 'break' ';' ;
+continue_stmt   : 'continue' ';' ;
+expr_stmt       : expr ';' ;
+
+// ─── Control flow ────────────────────────────────────────────────────────────
+if_stmt     : 'if' expr block_stmt ('else' block_stmt)? ;
+while_loop  : 'while' expr block_stmt ; // While loops are not value producing
+
+// ─── Blocks ─────────────────────────────────────────────────────────────────
+block_stmt
+    : '{' stmt_list '}'
+    ;
+
+block_expr
+  : '{' stmt_list expr '}'
+  ;
+
+// ─── Expressions ─────────────────────────────────────────────────────────────
+// A single left‑recursive expr rule, handling:
+//   - unary ops
+//   - suffix indexing:  e[ idx ]
+//   - suffix calls:     f( args )
+//   - binary ops (arithmetic & comparison)
+//   - logical ops
+//   - primary atoms
 expr
-    : primary                                # PrimaryExpr
-    | op=(MINUS | NOT) expr                 # UnaryExpr
-    | expr op=(TIMES | DIV | MOD) expr      # MulDivModExpr
-    | expr op=(PLUS | MINUS) expr           # AddSubExpr
-    | expr op=(LT | GT | LTE | GTE) expr    # CompareExpr
-    | expr op=(EQ | NEQ) expr               # EqualityExpr
-    | expr AND expr                         # AndExpr
-    | expr OR expr                          # OrExpr
+    : BOOL_OP expr                               # unaryExpr
+    | '&' expr                                   # refExpr
+    | '*' expr                                   # derefExpr
+    | expr '[' expr ']'                          # indexExpr
+    | expr '(' arg_list_opt ')'                  # callExpr
+    | expr (TIMES | DIV) expr                    # mulDivExpr
+    | expr (PLUS | MINUS) expr                   # addSubExpr
+    | expr (EQ | NEQ | LT | LTE | GT | GTE) expr # comparisonExpr
+    | expr BOOL_BINOP expr                       # logicalExpr
+    | primary                                    # primaryExpr
     ;
 
 primary
-    : INT                           # IntLiteral
-    | FLOAT                         # FloatLiteral
-    | TRUE                          # TrueLiteral
-    | FALSE                         # FalseLiteral
-    | ID                            # Identifier
-    | LPAREN expr RPAREN           # ParenExpr
+    : U32 # u32Literal
+    | BOOL # boolLiteral
+    | STRING # stringLiteral
+    | IDENTIFIER # identifier
+    | LPAREN expr RPAREN # parenExpr
+    | block_expr # blockExpr
+    | if_expr # ifExpr
+    | array_literal # arrayLiteral
+    | range_expr # rangeExpr
     ;
 
-args: expr (COMMA expr)*; 
+arg_list_opt
+    : /* empty */
+    | expr (',' expr)*
+    ;
+
+if_expr
+    : 'if' expr block_expr ('else' block_expr)?
+    ;
+
+array_literal
+    : '[' (expr (',' expr)*)? ']'
+    ;
+
+// Tuple literal
+tuple_expr
+    : '(' (expr (',' expr)*)? ')'
+    ;
+
+// Range expression
+range_expr
+    : U32 '..' U32
+    ;
+
+// ─── Leaf Expressions ────────────────────────────────────────────────────────
+str_expr   : STRING ('+' STRING)? ;
+bool_expr  : BOOL ;
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+type
+    : '()'                     // unit
+    | 'u32'
+    | 'bool'
+    | 'string'
+    | '&' type                // reference type
+    | 'fn' '(' type_list_opt ')' '->' type
+    ;
+
+type_list_opt
+    : /* empty */ 
+    | type (',' type)*
+    ;
+
+// ─── Lexer Rules ─────────────────────────────────────────────────────────────
+U32        : [0-9]+ ;
+STRING     : '"' (~["\\])* '"' ;
+IDENTIFIER : [a-zA-Z][a-zA-Z0-9_]* ;
+BOOL       : 'true' | 'false' ;
+BOOL_BINOP : '||' | '&&' ;
+BOOL_OP    : '!' ;
+
+// Arithmetic operators
+PLUS       : '+' ;
+MINUS      : '-' ;
+TIMES      : '*' ;
+DIV        : '/' ;
+
+// Comparison operators
+EQ         : '==' ;
+NEQ        : '!=' ;
+LT         : '<'  ;
+LTE        : '<=' ;
+GT         : '>'  ;
+GTE        : '>=' ;
+
+WS           : [ \t\r\n]+ -> skip ;
+LINE_COMMENT : '//' ~[\r\n]* -> skip ;
+
+LPAREN : '(' ;
+RPAREN : ')' ;
