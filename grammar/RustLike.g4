@@ -76,8 +76,8 @@ expr
     | '*' expr                                   # derefExpr
     | expr '[' expr ']'                          # indexExpr
     | expr '(' arg_list_opt ')'                  # callExpr
-    | expr ('*' | '/') expr                      # mulDivExpr
-    | expr ('+' | '-') expr                      # addSubExpr
+    | expr (TIMES | DIV) expr                    # mulDivExpr
+    | expr (PLUS | MINUS) expr                   # addSubExpr
     | expr ('==' | '!=' | '<' | '<=' | '>' | '>=') expr # comparisonExpr
     | expr BOOL_BINOP expr                       # logicalExpr
     | primary                                    # primaryExpr
@@ -146,6 +146,12 @@ IDENTIFIER : LETTER LETTER* ;
 BOOL       : 'true' | 'false' ;
 BOOL_BINOP : '||' | '&&' ;
 BOOL_OP    : '!' ;
+
+// Arithmetic operators
+PLUS       : '+' ;
+MINUS      : '-' ;
+TIMES      : '*' ;
+DIV        : '/' ;
 
 fragment DIGIT  : [0-9] ;
 fragment LETTER : [a-zA-Z] ;
