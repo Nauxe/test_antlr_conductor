@@ -34,7 +34,7 @@ export function typeEqual(a: RustLikeType, b: RustLikeType): boolean {
           ? false
           : a.paramTypes.every((rtype, idx) => typeEqual(rtype, b.paramTypes[idx])) &&
           a.captureTypes.every((rtype, idx) => typeEqual(rtype, b.captureTypes[idx]))
-        : true; // Should not reach here, but if it does it is a type where a.tag === b.tag
+        : false; // Should not reach here, but if it does it is a type where a.tag === b.tag
 }
 
 export type ScanResult = { names: string[]; types: RustLikeType[] };
