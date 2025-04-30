@@ -572,15 +572,15 @@ export class RustLikeCompilerVisitor
       this.visit(rhs);
 
       // Handle the operator
-      if (opTxt === "+") {
+      if (opTxt === "PLUS") {
         this.instructions.push(new Inst(Bytecode.PLUS));
-      } else if (opTxt === "-") {
+      } else if (opTxt === "MINUS") {
         this.instructions.push(new Inst(Bytecode.LDCI, -1));
         this.instructions.push(new Inst(Bytecode.TIMES));
         this.instructions.push(new Inst(Bytecode.PLUS));
-      } else if (opTxt === "*") {
+      } else if (opTxt === "TIMES") {
         this.instructions.push(new Inst(Bytecode.TIMES));
-      } else if (opTxt === "/") {
+      } else if (opTxt === "DIV") {
         // Handle division
         const tDivd = this.freshTemp();
         const tDivs = this.freshTemp();
@@ -634,19 +634,19 @@ export class RustLikeCompilerVisitor
 
         // leave result
         this.instructions.push(new Inst(Bytecode.LDHS, tQuot));
-      } else if (opTxt === "==") {
+      } else if (opTxt === "EQ") {
         this.instructions.push(new Inst(Bytecode.EQ));
-      } else if (opTxt === "!=") {
+      } else if (opTxt === "NEQ") {
         this.instructions.push(new Inst(Bytecode.EQ));
         this.instructions.push(new Inst(Bytecode.NOT));
-      } else if (opTxt === "<") {
+      } else if (opTxt === "LT") {
         this.instructions.push(new Inst(Bytecode.LT));
-      } else if (opTxt === "<=") {
+      } else if (opTxt === "LTE") {
         this.instructions.push(new Inst(Bytecode.LT));
         this.instructions.push(new Inst(Bytecode.NOT));
-      } else if (opTxt === ">") {
+      } else if (opTxt === "GT") {
         this.instructions.push(new Inst(Bytecode.LT));
-      } else if (opTxt === ">=") {
+      } else if (opTxt === "GTE") {
         this.instructions.push(new Inst(Bytecode.LT));
         this.instructions.push(new Inst(Bytecode.NOT));
       }
